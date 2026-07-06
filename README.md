@@ -52,6 +52,33 @@ skills/hwpx-editing/
 재압축하면 원본과 **바이트 100% 동일**합니다. `selftest.py`가 합성 파일로 이를
 증명하므로, 내 문서를 건드리기 전에 신뢰할 수 있습니다.
 
+### 누가 어떻게 쓰나
+
+쓰는 방식이 두 갈래입니다. 자기에게 맞는 쪽만 보면 됩니다.
+
+**① 터미널을 안 쓰는 분 (비개발자) — claude.ai에 업로드해서 쓰기**
+
+명령어 없이, 웹 브라우저만으로 씁니다.
+
+1. 이 GitHub 레포 상단의 초록색 **Code → Download ZIP** 으로 받아 압축을 풉니다.
+2. 그 안의 `skills/hwpx-editing` 폴더 **하나만** 다시 zip으로 묶습니다.
+3. claude.ai → **설정(Settings) → Features → Skills** 에서 그 zip을 업로드합니다
+   (코드 실행이 켜진 **Pro/Max/Team/Enterprise** 플랜 필요).
+4. 대화에 `.hwpx` 파일을 올리고 *"표를 CSV로 뽑아줘"* 처럼 자연어로 시킵니다 —
+   터미널·명령어는 전혀 쓰지 않습니다.
+
+**② 개발자 / 터미널을 쓰는 분 — CLI에 설치**
+
+Claude Code · Codex · Cursor · Gemini CLI 등에 스킬 폴더를 설치해 두면, 이후
+`.hwpx`/한글 작업에서 자동으로 발동합니다. 설치는 아래 **[빠른 설치](#빠른-설치-한-줄)**
+한 줄이면 됩니다.
+
+**③ 폴백 (고급) — 스킬 기능이 없는 환경**
+
+스킬 업로드/설치가 안 되는 도구라면, `references/hwpx-guide.md` 를 대화에 붙여넣어
+참고자료로만 쓸 수도 있습니다. 다만 이 방식은 검증된 스크립트가 자동 실행되지 않아,
+스킬 업로드/설치 방식보다 덜 안정적입니다.
+
 ### 빠른 설치 (한 줄)
 
 에이전트를 고르세요. 레포를 올린 뒤 `<your-username>`을 바꾸면 됩니다
@@ -167,6 +194,33 @@ skills/hwpx-editing/
 The crown jewel is `repack_preserve`: a **raw-preserving repacker** whose no-op output
 is **byte-identical** to the source. `selftest.py` proves it on a synthetic file, so you
 can trust it before touching your own documents.
+
+### Who is this for
+
+There are two ways to use it — read whichever one fits you.
+
+**① Not a terminal user (non-developer) — upload it to claude.ai**
+
+No commands, just a web browser.
+
+1. On this GitHub repo, use the green **Code → Download ZIP** and unzip it.
+2. Re-zip **only** the `skills/hwpx-editing` folder inside.
+3. On claude.ai, go to **Settings → Features → Skills** and upload that zip
+   (needs a **Pro/Max/Team/Enterprise** plan with code execution).
+4. Attach a `.hwpx` file to the chat and ask in plain language —
+   *"pull the tables out as CSV"* — no terminal or commands at all.
+
+**② Developer / terminal user — install into your CLI**
+
+Install the skill folder into Claude Code · Codex · Cursor · Gemini CLI, and it
+triggers automatically on `.hwpx` / 한글 work afterward. Installation is the
+one-liner in **[Quick install](#quick-install-one-line)** below.
+
+**③ Fallback (advanced) — no skill support**
+
+If your tool can't upload or install skills, you can paste
+`references/hwpx-guide.md` into the chat as reference material. Note this is less
+reliable than the skill route, since the verified scripts won't run automatically.
 
 ### Quick install (one line)
 
