@@ -124,7 +124,7 @@ pip install lxml       # or: pip3 install lxml
 ```bash
 python skills/hwpx-editing/scripts/selftest.py
 ```
-You should see four `PASS` lines and `RESULT: ALL PASS`.
+You should see six `PASS` lines and `RESULT: ALL PASS`.
 
 ---
 
@@ -248,4 +248,4 @@ pip install lxml       # 또는: pip3 install lxml
 ```bash
 python skills/hwpx-editing/scripts/selftest.py
 ```
-`PASS` 4줄과 `RESULT: ALL PASS`가 보이면 정상입니다.
+`PASS` 6줄과 `RESULT: ALL PASS`가 보이면 정상입니다.

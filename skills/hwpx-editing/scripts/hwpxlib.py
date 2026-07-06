@@ -77,6 +77,10 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
     Why this exists: 한글 rejects files whose unchanged entries were re-deflated.
     Copying their local records verbatim (flag bits and all) means a no-op repack
     is byte-identical to the source. Self-check with `self_verify_identical`.
+
+    Caveat: a file carrying an archive-level zip comment/prefix (data outside the
+    entries themselves) may not be byte-identical after a no-op repack, since only
+    the entries and central directory are preserved. Real 한글 HWPX has neither.
     """
     raw = open(src, "rb").read()
     recs, order = _parse_central(raw)
