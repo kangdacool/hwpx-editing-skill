@@ -35,7 +35,16 @@ def main() -> int:
     ap.add_argument("--breaks", action="store_true", help="list paragraphs with page/column breaks")
     args = ap.parse_args()
 
-    z = zipfile.ZipFile(args.file)
+    try:
+        H.ensure_hwpx(args.file)
+        z = zipfile.ZipFile(args.file)
+    except H.NotHwpxError as e:
+        print(str(e))
+        return 2
+    except zipfile.BadZipFile:
+        print("This is not a valid HWPX (a zip archive). "
+              "이 파일은 올바른 HWPX(zip)가 아닙니다. (이 도구는 HWPX 전용입니다.)")
+        return 2
     names = H.section_names(z)
     print(f"{args.file}")
     print(f"  entries: {len(z.namelist())}  sections: {len(names)}  "

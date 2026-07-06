@@ -20,6 +20,10 @@ from the outside, so **read the relevant section of `references/hwpx-guide.md`
 before editing**, and **run the scripts in `scripts/` to repack and verify** —
 don't hand-roll the zip or eyeball correctness.
 
+> **HWPX only.** This handles `.hwpx` (zip + XML) exclusively. A legacy `.hwp`
+> (OLE binary, signature `D0CF11E0`) must first be converted in 한글 via
+> **다른 이름으로 저장 → HWPX(.hwpx)**. The scripts detect `.hwp` and say so.
+
 ## The one rule that matters most
 
 **Never re-zip an HWPX with a normal zip writer.** 한글 rejects a file whose

@@ -125,6 +125,8 @@ Windows(PowerShell): `./install.ps1 claude` (하위 명령 동일).
 에이전트에게 대신 설치를 시키려면 **[LLM용 설치 가이드](docs/INSTALL_LLM.md)**를 주세요.
 
 > `lxml` 필요: `pip install lxml` (Python 3.10 이상).
+>
+> **HWPX 전용** — 구형 `.hwp`(OLE 바이너리)는 한글에서 먼저 **다른 이름으로 저장 → HWPX(.hwpx)**로 변환한 뒤 사용하세요.
 
 ### 사용법
 
@@ -261,6 +263,8 @@ the **[Human install guide](docs/INSTALL_HUMAN.md)**. Driving an agent to instal
 for you? Give it the **[LLM install guide](docs/INSTALL_LLM.md)**.
 
 > Requires `lxml`: `pip install lxml` (Python 3.10+).
+>
+> **HWPX only** — a legacy `.hwp` (OLE binary) must first be converted in 한글 via **다른 이름으로 저장 → HWPX(.hwpx)**.
 
 ### Use it
 

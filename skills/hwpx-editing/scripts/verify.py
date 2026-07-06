@@ -48,7 +48,18 @@ def main() -> int:
     args = ap.parse_args()
 
     hard_ok = True
-    z = zipfile.ZipFile(args.edited)
+    try:
+        H.ensure_hwpx(args.edited)
+        if args.orig:
+            H.ensure_hwpx(args.orig)
+        z = zipfile.ZipFile(args.edited)
+    except H.NotHwpxError as e:
+        print(str(e))
+        return 2
+    except zipfile.BadZipFile:
+        print("This is not a valid HWPX (a zip archive). "
+              "이 파일은 올바른 HWPX(zip)가 아닙니다. (이 도구는 HWPX 전용입니다.)")
+        return 2
 
     # 1. byte-identity self-check on the ORIGINAL (proves the repacker is lossless)
     if args.orig:

@@ -40,6 +40,38 @@ XML_DECL = b'<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>\n'
 
 
 # ---------------------------------------------------------------------------
+# §0. Format guard — HWPX only (reject legacy .hwp OLE binaries)
+# ---------------------------------------------------------------------------
+class NotHwpxError(Exception):
+    """The file is not an HWPX. Most often a legacy .hwp OLE binary (signature
+    D0 CF 11 E0), which this HWPX-only tool cannot read."""
+
+
+_OLE_MAGIC = b"\xd0\xcf\x11\xe0"  # legacy .hwp (and every OLE2 / CFB file)
+
+
+def ensure_hwpx(path: str) -> None:
+    """Raise NotHwpxError with actionable guidance if `path` is not a zip-based
+    HWPX — in particular a legacy .hwp (OLE binary, signature D0CF11E0). HWPX is
+    a zip, so it must start with the PK local-file signature. This only sniffs the
+    first bytes; it does not open or modify the file."""
+    with open(path, "rb") as f:
+        head = f.read(4)
+    if head == _OLE_MAGIC:
+        raise NotHwpxError(
+            "This looks like a legacy .hwp (OLE binary), not an HWPX. "
+            "이 파일은 구형 HWP 형식입니다. 한글에서 '다른 이름으로 저장 → "
+            "HWPX(.hwpx)'로 변환한 뒤 다시 시도하세요. (이 도구는 HWPX 전용입니다.)"
+        )
+    if head[:2] != b"PK":
+        raise NotHwpxError(
+            "This is not a valid HWPX (a zip archive). "
+            "이 파일은 올바른 HWPX(zip)가 아닙니다. 원본이 손상되지 않았는지, 혹은 "
+            "구형 .hwp가 아닌지 확인하세요. (이 도구는 HWPX 전용입니다.)"
+        )
+
+
+# ---------------------------------------------------------------------------
 # §2. Repack (raw-preserving) — THE most important primitive
 # ---------------------------------------------------------------------------
 def _parse_central(raw: bytes):
@@ -82,6 +114,7 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
     entries themselves) may not be byte-identical after a no-op repack, since only
     the entries and central directory are preserved. Real 한글 HWPX has neither.
     """
+    ensure_hwpx(src)
     raw = open(src, "rb").read()
     recs, order = _parse_central(raw)
     obuf, meta = io.BytesIO(), {}
