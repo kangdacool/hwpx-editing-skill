@@ -19,6 +19,36 @@ _A portable Agent Skill that teaches AI coding agents to edit HWPX (Hangul `.hwp
 
 ---
 
+<a name="easiest"></a>
+## 🪄 hwpx가 자꾸 깨지나요? (제일 쉬운 방법)
+
+터미널·설치 필요 없습니다. Claude(claude.ai)나 ChatGPT 같은 대화형 AI로 hwpx를
+만들거나 고치는 중이라면:
+
+1. **[이 파일 하나](skills/hwpx-editing/references/hwpx-guide.md)** 를 내려받습니다
+   (**Download raw file** 버튼, 또는 우클릭 → 다른 이름으로 저장).
+2. hwpx 작업 중인 **그 대화에 방금 받은 파일을 첨부**합니다.
+3. *"이 가이드 규칙대로 hwpx를 만들어/고쳐줘. 안 깨지게."* 라고 요청합니다.
+
+그게 전부입니다. AI가 직접 파일을 다룰 수 있을 때 가장 매끄럽게 동작합니다. 잘 안 되면
+아래 **[설치 방법](#누가-어떻게-쓰나)**을 참고하세요.
+
+<a name="the-easiest-way"></a>
+## 🪄 Keep getting corrupted hwpx files? (the easiest way)
+
+No terminal, no install. If you're creating or fixing hwpx with a chat AI like
+Claude (claude.ai) or ChatGPT:
+
+1. Download **[this one file](skills/hwpx-editing/references/hwpx-guide.md)**
+   (the **Download raw file** button, or right-click → Save link as).
+2. **Attach that file** to the same chat where you're working on the hwpx.
+3. Ask: *"Create/fix this hwpx following the rules in this guide, without corrupting it."*
+
+That's it. It works most smoothly when the AI can handle files directly. If it
+doesn't work well, see the **[install options](#who-is-this-for)** below.
+
+---
+
 <a name="한국어"></a>
 ## 한국어
 
@@ -54,30 +84,23 @@ skills/hwpx-editing/
 
 ### 누가 어떻게 쓰나
 
-쓰는 방식이 두 갈래입니다. 자기에게 맞는 쪽만 보면 됩니다.
+크게 두 부류로 나뉩니다. 자기에게 맞는 쪽만 보면 됩니다.
 
-**① 터미널을 안 쓰는 분 (비개발자) — claude.ai에 업로드해서 쓰기**
+**① 터미널을 안 쓰는 분 (비개발자)**
 
-명령어 없이, 웹 브라우저만으로 씁니다.
-
-1. 이 GitHub 레포 상단의 초록색 **Code → Download ZIP** 으로 받아 압축을 풉니다.
-2. 그 안의 `skills/hwpx-editing` 폴더 **하나만** 다시 zip으로 묶습니다.
-3. claude.ai → **설정(Settings) → Features → Skills** 에서 그 zip을 업로드합니다
-   (코드 실행이 켜진 **Pro/Max/Team/Enterprise** 플랜 필요).
-4. 대화에 `.hwpx` 파일을 올리고 *"표를 CSV로 뽑아줘"* 처럼 자연어로 시킵니다 —
-   터미널·명령어는 전혀 쓰지 않습니다.
+- **가장 쉽게, 한 번만** — 파일 하나(가이드)를 대화에 첨부하면 끝입니다. 맨 위
+  **[제일 쉬운 방법](#easiest)**을 보세요.
+- **자주 쓸 때 — 스킬로 업로드** — claude.ai에 스킬로 등록해 두면 매번 첨부할 필요가
+  없습니다. 이 GitHub 레포에서 **Code → Download ZIP** 으로 받아 압축을 풀고, 안의
+  `skills/hwpx-editing` 폴더 **하나만** 다시 zip으로 묶은 뒤, claude.ai →
+  **설정(Settings) → Features → Skills** 에서 업로드합니다(코드 실행이 켜진
+  **Pro/Max/Team/Enterprise** 플랜 필요). 이후 `.hwpx`를 올리고 자연어로 시키면 됩니다.
 
 **② 개발자 / 터미널을 쓰는 분 — CLI에 설치**
 
 Claude Code · Codex · Cursor · Gemini CLI 등에 스킬 폴더를 설치해 두면, 이후
 `.hwpx`/한글 작업에서 자동으로 발동합니다. 설치는 아래 **[빠른 설치](#빠른-설치-한-줄)**
 한 줄이면 됩니다.
-
-**③ 폴백 (고급) — 스킬 기능이 없는 환경**
-
-스킬 업로드/설치가 안 되는 도구라면, `references/hwpx-guide.md` 를 대화에 붙여넣어
-참고자료로만 쓸 수도 있습니다. 다만 이 방식은 검증된 스크립트가 자동 실행되지 않아,
-스킬 업로드/설치 방식보다 덜 안정적입니다.
 
 ### 빠른 설치 (한 줄)
 
@@ -196,30 +219,23 @@ can trust it before touching your own documents.
 
 ### Who is this for
 
-There are two ways to use it — read whichever one fits you.
+Two kinds of users — read whichever one fits you.
 
-**① Not a terminal user (non-developer) — upload it to claude.ai**
+**① Not a terminal user (non-developer)**
 
-No commands, just a web browser.
-
-1. On this GitHub repo, use the green **Code → Download ZIP** and unzip it.
-2. Re-zip **only** the `skills/hwpx-editing` folder inside.
-3. On claude.ai, go to **Settings → Features → Skills** and upload that zip
-   (needs a **Pro/Max/Team/Enterprise** plan with code execution).
-4. Attach a `.hwpx` file to the chat and ask in plain language —
-   *"pull the tables out as CSV"* — no terminal or commands at all.
+- **Easiest, one-off** — just attach one file (the guide) to your chat. See
+  **[the easiest way](#the-easiest-way)** at the top.
+- **Using it often — upload as a skill** — register it once on claude.ai so you
+  don't attach it every time. Download this repo via **Code → Download ZIP**, unzip,
+  re-zip **only** the `skills/hwpx-editing` folder, then upload it under
+  **Settings → Features → Skills** (needs a **Pro/Max/Team/Enterprise** plan with
+  code execution). Then attach a `.hwpx` and ask in plain language.
 
 **② Developer / terminal user — install into your CLI**
 
 Install the skill folder into Claude Code · Codex · Cursor · Gemini CLI, and it
 triggers automatically on `.hwpx` / 한글 work afterward. Installation is the
 one-liner in **[Quick install](#quick-install-one-line)** below.
-
-**③ Fallback (advanced) — no skill support**
-
-If your tool can't upload or install skills, you can paste
-`references/hwpx-guide.md` into the chat as reference material. Note this is less
-reliable than the skill route, since the verified scripts won't run automatically.
 
 ### Quick install (one line)
 
