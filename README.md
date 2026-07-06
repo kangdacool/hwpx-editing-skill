@@ -116,13 +116,14 @@ cd hwpx-editing-skill
 ./install.sh codex       # OpenAI Codex                  → ~/.codex/skills/
 ./install.sh cursor      # Cursor (프로젝트)              → .cursor/skills/
 ./install.sh gemini      # Gemini CLI                    → ~/.gemini/skills/
-./install.sh all         # 감지되는 에이전트 전부
+./install.sh openclaw    # OpenClaw                      → ~/.openclaw/skills/
+./install.sh all         # 지원하는 모든 에이전트에 설치(openclaw 포함)
 ```
 
 Windows(PowerShell): `./install.ps1 claude` (하위 명령 동일).
 
-직접 손으로 넣거나 프로젝트 레포에 커밋하고 싶다면 **[사람용 설치 가이드](docs/INSTALL_HUMAN.md)**,
-에이전트에게 대신 설치를 시키려면 **[LLM용 설치 가이드](docs/INSTALL_LLM.md)**를 주세요.
+더 자세한 설치 방법은 **[사람용 설치 가이드](docs/INSTALL_HUMAN.md)**, 에이전트에게 대신 설치를
+시키려면 **[LLM용 설치 가이드](docs/INSTALL_LLM.md)**를 참고하세요.
 
 > `lxml` 필요: `pip install lxml` (Python 3.10 이상).
 >
@@ -253,14 +254,14 @@ cd hwpx-editing-skill
 ./install.sh codex       # OpenAI Codex                  → ~/.codex/skills/
 ./install.sh cursor      # Cursor                        → .cursor/skills/ (project)
 ./install.sh gemini      # Gemini CLI                    → ~/.gemini/skills/
-./install.sh all         # everything the installer detects
+./install.sh openclaw    # OpenClaw                      → ~/.openclaw/skills/
+./install.sh all         # install into every supported agent (incl. openclaw)
 ```
 
 Windows (PowerShell): `./install.ps1 claude` (same subcommands).
 
-Prefer to do it by hand, or want the project-scoped version committed to a repo? See
-the **[Human install guide](docs/INSTALL_HUMAN.md)**. Driving an agent to install it
-for you? Give it the **[LLM install guide](docs/INSTALL_LLM.md)**.
+For more detail, see the **[Human install guide](docs/INSTALL_HUMAN.md)**; to have an
+agent install it for you, give it the **[LLM install guide](docs/INSTALL_LLM.md)**.
 
 > Requires `lxml`: `pip install lxml` (Python 3.10+).
 >
