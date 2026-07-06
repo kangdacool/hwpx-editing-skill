@@ -16,6 +16,16 @@ import io
 import sys
 import zipfile
 
+# Force UTF-8 console output so non-ASCII glyphs in our messages (—, «», 한글)
+# never crash on a Windows cp949 console (UnicodeEncodeError). No-op where the
+# stream is already UTF-8, or where reconfigure() is unavailable (Python <3.7,
+# or a redirected/replaced stream) — hence the broad guard.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
+
 import hwpxlib as H
 
 
@@ -81,6 +91,50 @@ def main() -> int:
     ok &= e4
     print(f"[{'PASS' if e4 else 'FAIL'}] 4. duplicate-id detection ({dups}) + "
           f"linesegarray strip ({removed} removed)")
+
+    # 5. encoding regression (Windows cp949): the exact glyphs our CLIs print
+    #    (— « » 한글) crash a raw cp949 stream, but the reconfigure(utf-8) guard
+    #    the CLIs apply at import time must make them safe. Proves the fix works.
+    glyphs = "— « » 한글"  # em-dash, guillemets, Hangul
+    crashes_on_cp949 = False
+    try:
+        w = io.TextIOWrapper(io.BytesIO(), encoding="cp949")
+        w.write(glyphs); w.flush()
+    except UnicodeEncodeError:
+        crashes_on_cp949 = True
+    guard_ok = True
+    try:
+        w2 = io.TextIOWrapper(io.BytesIO(), encoding="cp949")
+        try:
+            w2.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError, OSError):
+            pass
+        w2.write(glyphs); w2.flush()
+    except UnicodeEncodeError:
+        guard_ok = False
+    e5 = crashes_on_cp949 and guard_ok
+    ok &= e5
+    print(f"[{'PASS' if e5 else 'FAIL'}] 5. cp949 console: raw stream crashes "
+          f"({crashes_on_cp949}), reconfigure(utf-8) guard prints safely ({guard_ok})")
+
+    # 6. own() must exclude 각주(footNote)/미주(endNote)/메모(fieldBegin) bodies,
+    #    keeping only real body text.
+    para_xml = (
+        '<hp:p xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">'
+        '<hp:run><hp:t>본문앞</hp:t>'
+        '<hp:ctrl><hp:footNote><hp:subList><hp:p><hp:run>'
+        '<hp:t>각주내용</hp:t></hp:run></hp:p></hp:subList></hp:footNote></hp:ctrl>'
+        '<hp:ctrl><hp:endNote><hp:subList><hp:p><hp:run>'
+        '<hp:t>미주내용</hp:t></hp:run></hp:p></hp:subList></hp:endNote></hp:ctrl>'
+        '<hp:fieldBegin><hp:subList><hp:p><hp:run>'
+        '<hp:t>메모내용</hp:t></hp:run></hp:p></hp:subList></hp:fieldBegin>'
+        '<hp:t>본문뒤</hp:t></hp:run></hp:p>'
+    )
+    body = H.own(H.etree.fromstring(para_xml.encode("utf-8")))
+    e6 = (body == "본문앞본문뒤")
+    ok &= e6
+    print(f"[{'PASS' if e6 else 'FAIL'}] 6. own() excludes 각주/미주/메모 bodies "
+          f"(got {body!r}, want '본문앞본문뒤')")
 
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")

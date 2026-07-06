@@ -100,6 +100,18 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
             meta[name] = dict(rc, flag=0, crc=crc, csize=len(comp),
                               usize=len(data), loff=loff, extra=b"")
         else:  # byte-for-byte raw copy of the local entry
+            if rc["flag"] & 0x08:
+                # flag bit 3 = data descriptor: the local header's csize/crc are
+                # zero and the real values trail the compressed data. Byte-copying
+                # by the (zero) local csize would truncate the entry, so we refuse
+                # rather than emit a corrupt zip. self_verify_identical also fails
+                # on such files, so verify.py already blocks them.
+                raise ValueError(
+                    f"Entry {name!r} uses a zip data descriptor (flag bit 3), so "
+                    "repack_preserve cannot losslessly byte-copy it. "
+                    "이 파일은 data descriptor를 써서 이 도구로 편집할 수 없습니다. "
+                    "한글에서 한 번 저장한 뒤 다시 시도하세요."
+                )
             ho = rc["loff"]
             (sig, ver, flag, method, mt, md, crc, csize, usize, fnl, efl) = \
                 struct.unpack("<IHHHHHIIIHH", raw[ho:ho + 30])
@@ -146,15 +158,19 @@ def section_names(z: zipfile.ZipFile) -> list[str]:
 
 
 def own(p) -> str:
-    """The paragraph's *real* body text — excluding endnote/memo interiors.
+    """The paragraph's *real* body text — 각주·미주·메모 본문을 제외한 진짜 본문
+    (read-only extraction).
 
     Using itertext() (not .text) so lineBreak tails aren't dropped, and skipping
-    any <hp:t> nested under endNote/fieldBegin (미주·메모) so review comments and
-    footnote bodies don't leak into extracted text.
+    any <hp:t> nested under footNote/endNote/fieldBegin (각주·미주·메모) so
+    footnote/endnote bodies and review comments don't leak into extracted text.
+
+    This is extraction only; editing a note (e.g. 각주↔미주 conversion) is
+    separate logic that rewrites the footNote/endNote ctrl + autoNum numType.
     """
     parts = []
     for t in p.findall(f".//{P}t"):
-        if not any(a.tag in (f"{P}endNote", f"{P}fieldBegin")
+        if not any(a.tag in (f"{P}footNote", f"{P}endNote", f"{P}fieldBegin")
                    for a in t.iterancestors()):
             parts.append("".join(t.itertext()))
     return "".join(parts)
@@ -183,6 +199,9 @@ def make_uid(root):
     Cloning an element with deepcopy inherits the original's id — which causes
     duplicates and instability. Call uid() for every cloned id-bearing node
     (endnote subList>p, table tbl/tc/p, etc.).
+
+    Uniqueness is guaranteed only within the passed `root` (ids are section-
+    scoped); it does not dedupe across sections.
     """
     ids = {int(v) for elx in root.iter() for a in _ID_ATTRS
            if (v := elx.get(a)) and str(v).isdigit()}

@@ -19,6 +19,16 @@ import argparse
 import sys
 import zipfile
 
+# Force UTF-8 console output so non-ASCII glyphs in our messages (—, «», 한글)
+# never crash on a Windows cp949 console (UnicodeEncodeError). No-op where the
+# stream is already UTF-8, or where reconfigure() is unavailable (Python <3.7,
+# or a redirected/replaced stream) — hence the broad guard.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError, OSError):
+    pass
+
 import hwpxlib as H
 
 

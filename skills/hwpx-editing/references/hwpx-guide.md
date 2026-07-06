@@ -15,7 +15,7 @@
 6. **이미지를 추출 순서대로 배치 → 뒤바뀜.** **내용으로 검증**(§5-수식/그림).
 7. **header.xml에 charPr/paraPr 추가 후 `itemCnt` 미갱신 → 거부.** 되도록 **기존 정의 재사용**(§4).
 8. **일괄 정규식 치환(띄어쓰기 등) → 코드·표 인접 셀 파괴.** 단위별 스캔·섹션 스코핑(§4).
-9. **텍스트 추출을 `.text`로만 → `itertext()` 미사용, 표 셀·메모 혼입.** `own()`으로 미주·메모 제외, 셀은 개별 순회(§1).
+9. **텍스트 추출을 `.text`로만 → `itertext()` 미사용, 표 셀·메모 혼입.** `own()`으로 각주·미주·메모 제외, 셀은 개별 순회(§1).
 10. **컬럼폭 초과 표를 2단에 둠 → 잘림.** 1단 구역으로, 순서 유지는 secPr 블록 이동(§6-D).
 
 ---
@@ -32,9 +32,9 @@ P='{http://www.hancom.co.kr/hwpml/2011/paragraph}'
 H='{http://www.hancom.co.kr/hwpml/2011/head}'
 z=zipfile.ZipFile('file.hwpx'); root=etree.fromstring(z.read('Contents/section0.xml'))
 
-def own(p):   # 미주(endNote)·메모(fieldBegin) 내부 텍스트 제외한 '진짜 본문'
+def own(p):   # 각주(footNote)·미주(endNote)·메모(fieldBegin) 내부 텍스트 제외한 '진짜 본문'
     return ''.join(''.join(t.itertext()) for t in p.findall(f'.//{P}t')
-                   if not any(a.tag in (f'{P}endNote',f'{P}fieldBegin') for a in t.iterancestors()))
+                   if not any(a.tag in (f'{P}footNote',f'{P}endNote',f'{P}fieldBegin') for a in t.iterancestors()))
 ```
 
 규칙: **본문은 section0~N 전부 확인** · 텍스트는 **`itertext()`**(lineBreak tail 누락 방지) · 그림 존재는 **`<hp:pic>` 직접 검색** · 표 텍스트는 **`<hp:tc>` 셀별로**(itertext로 한 번에 뽑으면 인접 셀이 붙어 거짓양성) · `styleIDRef`/`paraPrIDRef`/`charPrIDRef`/`borderFillIDRef`는 **파일마다 다르니 실제 파일에서 읽어** 쓴다.
