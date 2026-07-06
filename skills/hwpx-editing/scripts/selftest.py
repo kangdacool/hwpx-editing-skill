@@ -136,6 +136,27 @@ def main() -> int:
     print(f"[{'PASS' if e6 else 'FAIL'}] 6. own() excludes 각주/미주/메모 bodies "
           f"(got {body!r}, want '본문앞본문뒤')")
 
+    # 7. duplicate-id policy: 한글 legitimately reuses an id on EMPTY structural
+    #    paragraphs, so a pre-existing duplicate in the original is not the edit's
+    #    fault. An edit that introduces NO new duplicate must not be flagged —
+    #    only edit-introduced dupes (in edited but not in orig) are failures.
+    pns = "http://www.hancom.co.kr/hwpml/2011/paragraph"
+    orig_sec = H.etree.fromstring(
+        (f'<sec xmlns:hp="{pns}">'
+         '<hp:p id="7"><hp:run></hp:run></hp:p>'      # empty paragraph
+         '<hp:p id="7"><hp:run></hp:run></hp:p>'      # same id reused on empty para
+         '<hp:p id="9"><hp:run><hp:t>본문</hp:t></hp:run></hp:p>'
+         '</sec>').encode("utf-8"))
+    edited_sec = H.etree.fromstring(H.etree.tostring(orig_sec))
+    H.etree.SubElement(edited_sec, f"{{{pns}}}p").set("id", "11")  # add unique id, no new dup
+    orig_dups = set(H.find_duplicate_ids(orig_sec).keys())
+    new_dups = {k: v for k, v in H.find_duplicate_ids(edited_sec).items()
+                if k not in orig_dups}
+    e7 = (orig_dups == {7}) and (new_dups == {})
+    ok &= e7
+    print(f"[{'PASS' if e7 else 'FAIL'}] 7. id-dup policy: orig dup {sorted(orig_dups)} "
+          f"pre-existing, edit adds no new dup ({new_dups})")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1

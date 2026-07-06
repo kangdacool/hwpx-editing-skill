@@ -73,14 +73,32 @@ def main() -> int:
     hard_ok &= _p(not bad, "2. all XML well-formed (sections + content.hpf)",
                   "; ".join(bad) if bad else f"{len(wf)} entries OK")
 
-    # 3. duplicate ids across all sections
-    dups_total = {}
+    # 3. duplicate ids. 한글 legitimately reuses ids on empty structural
+    #    paragraphs, so a real file can ship pre-existing duplicates. Only ids the
+    #    EDIT newly duplicated are a hard failure; with --orig we separate the two,
+    #    without --orig we can only report duplicates informationally.
+    edited_dups = {}
     for name in H.section_names(z):
         root = H.etree.fromstring(z.read(name))
         for k, c in H.find_duplicate_ids(root).items():
-            dups_total[k] = dups_total.get(k, 0) + c
-    hard_ok &= _p(not dups_total, "3. no duplicate ids",
-                  "" if not dups_total else f"dupes: {dict(list(dups_total.items())[:8])}")
+            edited_dups[k] = edited_dups.get(k, 0) + c
+    if args.orig:
+        orig_dups = set()
+        zo3 = zipfile.ZipFile(args.orig)
+        for name in H.section_names(zo3):
+            orig_dups.update(H.find_duplicate_ids(H.etree.fromstring(zo3.read(name))).keys())
+        new_dups = {k: v for k, v in edited_dups.items() if k not in orig_dups}
+        inherited = {k: v for k, v in edited_dups.items() if k in orig_dups}
+        detail = "" if not new_dups else f"edit-introduced dupes: {dict(list(new_dups.items())[:8])}"
+        if inherited:
+            note = f"{len(inherited)} pre-existing in orig, ignored"
+            detail = f"{detail}  [{note}]" if detail else f"({note})"
+        hard_ok &= _p(not new_dups, "3. no edit-introduced duplicate ids", detail)
+    elif edited_dups:
+        print(f"[info] 3. duplicate ids present (informational; pass --orig to gate "
+              f"on edit-introduced ones): {dict(list(edited_dups.items())[:8])}")
+    else:
+        _p(True, "3. no duplicate ids")
 
     # 5. zip integrity (report before 4/6 which are informational)
     zi = H.zip_integrity(z)

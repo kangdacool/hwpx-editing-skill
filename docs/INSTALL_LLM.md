@@ -31,7 +31,7 @@ instructions to the agent.
 >    ```bash
 >    python ~/.claude/skills/hwpx-editing/scripts/selftest.py
 >    ```
->    Expect six `PASS` lines and `RESULT: ALL PASS`. In Claude Code, also confirm the
+>    Expect seven `PASS` lines and `RESULT: ALL PASS`. In Claude Code, also confirm the
 >    skill appears in `/skills`.
 > 6. Report the final install path and the selftest result. Do not print or store any
 >    credentials; if `git push` or auth is needed, ask the user to handle it.
