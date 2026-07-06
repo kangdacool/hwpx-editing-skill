@@ -24,7 +24,7 @@ Thanks for helping make HWPX editing safer for everyone. / HWPX 편집을 더 �
 ## Dev setup
 
 ```bash
-git clone https://github.com/<your-username>/hwpx-editing-skill.git
+git clone https://github.com/kangdacool/hwpx-editing-skill.git
 cd hwpx-editing-skill
 pip install lxml
 python skills/hwpx-editing/scripts/selftest.py

@@ -17,7 +17,7 @@ instructions to the agent.
 >    - Gemini CLI → `~/.gemini/skills/`
 >    - OpenClaw → `~/.openclaw/skills/`
 > 2. If you're not already inside this repo, clone it:
->    `git clone https://github.com/<your-username>/hwpx-editing-skill.git`
+>    `git clone https://github.com/kangdacool/hwpx-editing-skill.git`
 > 3. Copy the skill folder so that `SKILL.md` lands **directly** inside a `hwpx-editing/`
 >    folder in the chosen skills directory. Example for Claude Code:
 >    ```bash
