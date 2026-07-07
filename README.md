@@ -8,6 +8,7 @@
 
 _A portable Agent Skill that teaches AI coding agents to edit HWPX (Hangul `.hwpx`) files without corrupting them._
 
+[![CI](https://github.com/kangdacool/hwpx-editing-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/kangdacool/hwpx-editing-skill/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Agent Skill](https://img.shields.io/badge/format-SKILL.md-8A2BE2)
@@ -80,7 +81,9 @@ skills/hwpx-editing/
 
 핵심은 `repack_preserve`(**raw-preserving 재압축기**)입니다. 아무것도 안 바꾸고
 재압축하면 원본과 **바이트 100% 동일**합니다. `selftest.py`가 합성 파일로 이를
-증명하므로, 내 문서를 건드리기 전에 신뢰할 수 있습니다.
+증명하므로, 내 문서를 건드리기 전에 신뢰할 수 있습니다. 여기에 더해, 실제 한글 문서
+**3종(본문 4·10·12개 섹션 규모, 모두 이미지·표·수식·미주 포함)**에서 편집 후 한글로
+다시 열어 정상 동작을 확인했습니다.
 
 ### 누가 어떻게 쓰나
 
@@ -218,7 +221,9 @@ skills/hwpx-editing/
 
 The crown jewel is `repack_preserve`: a **raw-preserving repacker** whose no-op output
 is **byte-identical** to the source. `selftest.py` proves it on a synthetic file, so you
-can trust it before touching your own documents.
+can trust it before touching your own documents. Beyond the synthetic self-test, it's
+been validated on **3 real 한글 documents** (spanning 4, 10, and 12 sections, each with
+images, tables, equations, and endnotes) — edited and re-opened in 한글.
 
 ### Who is this for
 
