@@ -65,7 +65,7 @@ cd skills && zip -r hwpx-editing.zip hwpx-editing && cd ..
 
 The scripts use `lxml`:
 ```bash
-pip install lxml       # or: pip3 install lxml
+pip install lxml openpyxl       # openpyxl: table→Excel export
 ```
 
 #### Verify it works (no HWPX needed)
@@ -73,7 +73,7 @@ pip install lxml       # or: pip3 install lxml
 ```bash
 python skills/hwpx-editing/scripts/selftest.py
 ```
-You should see nine `PASS` lines and `RESULT: ALL PASS`.
+You should see ten `PASS` lines and `RESULT: ALL PASS`.
 
 ---
 
@@ -138,7 +138,7 @@ cd skills && zip -r hwpx-editing.zip hwpx-editing && cd ..
 
 스크립트는 `lxml`을 씁니다:
 ```bash
-pip install lxml       # 또는: pip3 install lxml
+pip install lxml openpyxl       # openpyxl: 표→엑셀 변환
 ```
 
 #### 동작 확인 (HWPX 없이)
@@ -146,4 +146,4 @@ pip install lxml       # 또는: pip3 install lxml
 ```bash
 python skills/hwpx-editing/scripts/selftest.py
 ```
-`PASS` 9줄과 `RESULT: ALL PASS`가 보이면 정상입니다.
+`PASS` 10줄과 `RESULT: ALL PASS`가 보이면 정상입니다.

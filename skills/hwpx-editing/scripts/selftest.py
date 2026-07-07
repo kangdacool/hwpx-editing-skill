@@ -243,6 +243,49 @@ def main() -> int:
     print(f"[{'PASS' if e9 else 'FAIL'}] 9. caption create+position+align "
           f"(order={order[:4]}, side={capn.get('side') if capn is not None else None}, align={align9})")
 
+    # 10. table → Excel export preserves merged cells. Build a table with BOTH a
+    #     colSpan (title row) and a rowSpan (side header), convert via
+    #     tables_to_xlsx, and confirm the .xlsx carries both merges + text.
+    #     Skipped (not failed) when openpyxl is absent — it's an optional export dep.
+    try:
+        import openpyxl  # noqa: F401
+        import tables_to_xlsx as TX
+        _have_xlsx = True
+    except ImportError:
+        _have_xlsx = False
+    if _have_xlsx:
+        def _tc(col, row, cs, rs, txt):
+            return (f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                    f'<hp:cellSpan colSpan="{cs}" rowSpan="{rs}"/><hp:subList><hp:p>'
+                    f'<hp:run charPrIDRef="0"><hp:t>{txt}</hp:t></hp:run></hp:p></hp:subList></hp:tc>')
+        tsec = (H.XML_DECL + (
+            f'<sec xmlns:hp="{pns}"><hp:p id="40"><hp:run><hp:ctrl>'
+            '<hp:tbl id="41" rowCnt="3" colCnt="3">'
+            '<hp:sz width="30000" height="3000"/><hp:pos/><hp:outMargin/>'
+            '<hp:tr>' + _tc(0, 0, 3, 1, "제목") + '</hp:tr>'
+            '<hp:tr>' + _tc(0, 1, 1, 2, "세로") + _tc(1, 1, 1, 1, "b") + _tc(2, 1, 1, 1, "c") + '</hp:tr>'
+            '<hp:tr>' + _tc(1, 2, 1, 1, "e") + _tc(2, 2, 1, 1, "f") + '</hp:tr>'
+            '</hp:tbl></hp:ctrl></hp:run></hp:p></sec>').encode("utf-8"))
+        cd3 = tempfile.mkdtemp()
+        thwpx = os.path.join(cd3, "t.hwpx")
+        zf = zipfile.ZipFile(thwpx, "w")
+        zi = zipfile.ZipInfo("mimetype"); zi.compress_type = zipfile.ZIP_STORED
+        zf.writestr(zi, b"application/hwp+zip")
+        zf.writestr("Contents/header.xml",
+                    H.XML_DECL + b'<head xmlns="http://www.hancom.co.kr/hwpml/2011/head"/>')
+        zf.writestr("Contents/section0.xml", tsec); zf.close()
+        xout = os.path.join(cd3, "t.xlsx")
+        TX.convert(thwpx, xout)
+        ws = openpyxl.load_workbook(xout)["T1"]
+        ranges = {str(m) for m in ws.merged_cells.ranges}
+        e10 = ("A1:C1" in ranges and "A2:A3" in ranges
+               and ws["A1"].value == "제목" and ws["A2"].value == "세로" and ws["C3"].value == "f")
+        ok &= e10
+        print(f"[{'PASS' if e10 else 'FAIL'}] 10. table→xlsx merges preserved "
+              f"(ranges={sorted(ranges)}, A1={ws['A1'].value!r})")
+    else:
+        print("[SKIP] 10. table→xlsx (openpyxl not installed — pip install openpyxl)")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1

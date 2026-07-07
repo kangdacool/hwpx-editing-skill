@@ -26,12 +26,12 @@ instructions to the agent.
 >    ```
 >    (Prefer the repo's installer if present: `./install.sh <agent>`, or
 >    `./install.sh --link <agent>` to symlink instead of copy.)
-> 4. Ensure the Python dependency is available: `pip install lxml` (Python 3.10+).
+> 4. Ensure the Python dependencies are available: `pip install lxml openpyxl` (Python 3.10+; openpyxl is for the table→Excel export).
 > 5. Verify the skill loads and the tools run:
 >    ```bash
 >    python ~/.claude/skills/hwpx-editing/scripts/selftest.py
 >    ```
->    Expect nine `PASS` lines and `RESULT: ALL PASS`. In Claude Code, also confirm the
+>    Expect ten `PASS` lines and `RESULT: ALL PASS`. In Claude Code, also confirm the
 >    skill appears in `/skills`.
 > 6. Report the final install path and the selftest result. Do not print or store any
 >    credentials; if `git push` or auth is needed, ask the user to handle it.

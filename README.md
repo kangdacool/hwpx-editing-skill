@@ -152,6 +152,7 @@ Windows(PowerShell): `./install.ps1 claude` (하위 명령 동일).
 python skills/hwpx-editing/scripts/inspect_hwpx.py 내문서.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py 편집본.hwpx --orig 원본.hwpx
 python skills/hwpx-editing/scripts/selftest.py     # 파일 없이 동작 점검
+python skills/hwpx-editing/scripts/tables_to_xlsx.py 내문서.hwpx   # 표 전부 엑셀로(병합 보존)
 ```
 
 ### 이 스킬이 막아주는 함정
@@ -291,6 +292,7 @@ You can also run the tools directly:
 python skills/hwpx-editing/scripts/inspect_hwpx.py mydoc.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py edited.hwpx --orig original.hwpx
 python skills/hwpx-editing/scripts/selftest.py     # sanity check, no file needed
+python skills/hwpx-editing/scripts/tables_to_xlsx.py mydoc.hwpx   # tables → Excel (merges preserved)
 ```
 
 ### The traps it protects you from

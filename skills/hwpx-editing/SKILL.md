@@ -74,8 +74,9 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
 | `inspect_hwpx.py FILE [--text] [--breaks]` | Structure dump; find hidden page/column breaks. |
 | `verify.py EDITED [--orig ORIG]` | Run the full §7 checklist; non-zero exit on failure (CI-gateable). |
 | `selftest.py` | Prove the repacker is lossless without a real file. |
+| `tables_to_xlsx.py FILE [OUT]` | Export tables to Excel (.xlsx), merged cells preserved (needs `openpyxl`). Cells with only an image/equation → `[그림]`/`[수식]`; legacy `.hwp` is refused with guidance. |
 
-Scripts need **lxml** (`pip install lxml`). Python 3.10+.
+Scripts need **lxml** (`pip install lxml`); the table→Excel export also needs **openpyxl**. Python 3.10+.
 
 ## Where to read in the guide (`references/hwpx-guide.md`)
 
