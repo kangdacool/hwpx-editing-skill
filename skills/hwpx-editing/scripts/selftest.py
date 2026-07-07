@@ -157,6 +157,92 @@ def main() -> int:
     print(f"[{'PASS' if e7 else 'FAIL'}] 7. id-dup policy: orig dup {sorted(orig_dups)} "
           f"pre-existing, edit adds no new dup ({new_dups})")
 
+    # 8. caption edit is surgical & lossless. HWPX table/figure captions are edited
+    #    by replacing the last <hp:t> inside <hp:caption> (guide §4). Prove that doing
+    #    so and repacking (a) updates only the caption text, (b) leaves other entries
+    #    byte-identical, (c) yields a valid zip. (Rendering in 한글 is a manual check.)
+    cap_sec = (H.XML_DECL + (
+        f'<sec xmlns:hp="{pns}">'
+        '<hp:p id="20"><hp:run><hp:ctrl><hp:tbl id="21"><hp:tr><hp:tc>'
+        '<hp:subList><hp:p id="22"><hp:run><hp:t>셀</hp:t></hp:run></hp:p></hp:subList>'
+        '</hp:tc></hp:tr>'
+        '<hp:caption><hp:subList><hp:p id="23"><hp:run>'
+        '<hp:t>표 1. 원래캡션</hp:t></hp:run></hp:p></hp:subList></hp:caption>'
+        '</hp:tbl></hp:ctrl></hp:run></hp:p>'
+        '</sec>').encode("utf-8"))
+    cd = tempfile.mkdtemp()
+    corig = os.path.join(cd, "cap.hwpx")
+    zf = zipfile.ZipFile(corig, "w")
+    zi = zipfile.ZipInfo("mimetype"); zi.compress_type = zipfile.ZIP_STORED
+    zf.writestr(zi, b"application/hwp+zip")
+    zf.writestr("Contents/header.xml",
+                H.XML_DECL + b'<head xmlns="http://www.hancom.co.kr/hwpml/2011/head"/>')
+    zf.writestr("Contents/section0.xml", cap_sec)
+    zf.close()
+    root = H.etree.fromstring(zipfile.ZipFile(corig).read("Contents/section0.xml"))
+    cap_t = root.find(f".//{{{pns}}}caption").findall(f".//{{{pns}}}t")[-1]  # last <hp:t>
+    cap_t.text = "표 1. 바뀐캡션"
+    new_sec = H.XML_DECL + H.etree.tostring(root)
+    cout = os.path.join(cd, "cap_edited.hwpx")
+    H.repack_preserve(corig, {"Contents/section0.xml": new_sec}, cout)
+    zc = zipfile.ZipFile(cout)
+    got_cap = (H.etree.fromstring(zc.read("Contents/section0.xml"))
+               .find(f".//{{{pns}}}caption").findall(f".//{{{pns}}}t")[-1].text)
+    others_ok = zc.read("Contents/header.xml") == zipfile.ZipFile(corig).read("Contents/header.xml")
+    diff = H.minimal_diff(cap_sec, new_sec)
+    only_caption = bool(diff) and all("캡션" in ln for ln in diff)
+    e8 = (got_cap == "표 1. 바뀐캡션") and others_ok and (zc.testzip() is None) and only_caption
+    ok &= e8
+    print(f"[{'PASS' if e8 else 'FAIL'}] 8. caption edit surgical+lossless "
+          f"(cap now {got_cap!r}, {len(diff)} changed line(s), others byte-identical)")
+
+    # 9. caption CREATION + position + alignment on an object that has none.
+    #    Insert <hp:caption> right after <hp:outMargin> (ShapeObject order
+    #    sz·pos·outMargin·caption·…); position via side=, text alignment via the
+    #    caption paragraph's paraPrIDRef. Prove it lands in the right slot, carries
+    #    the chosen side/alignment/text, and is lossless. (Render = manual check.)
+    tbl_sec = (H.XML_DECL + (
+        f'<sec xmlns:hp="{pns}">'
+        '<hp:p id="30"><hp:run><hp:ctrl><hp:tbl id="31">'
+        '<hp:sz width="40000" height="2000"/><hp:pos/><hp:outMargin/>'
+        '<hp:tr><hp:tc><hp:subList><hp:p id="0"><hp:run charPrIDRef="1">'
+        '<hp:t>셀</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr>'
+        '</hp:tbl></hp:ctrl></hp:run></hp:p></sec>').encode("utf-8"))
+    cd2 = tempfile.mkdtemp()
+    torig = os.path.join(cd2, "t.hwpx")
+    zf = zipfile.ZipFile(torig, "w")
+    zi = zipfile.ZipInfo("mimetype"); zi.compress_type = zipfile.ZIP_STORED
+    zf.writestr(zi, b"application/hwp+zip")
+    zf.writestr("Contents/header.xml",
+                H.XML_DECL + b'<head xmlns="http://www.hancom.co.kr/hwpml/2011/head"/>')
+    zf.writestr("Contents/section0.xml", tbl_sec); zf.close()
+    r9 = H.etree.fromstring(zipfile.ZipFile(torig).read("Contents/section0.xml"))
+    tbl9 = r9.find(f".//{{{pns}}}tbl")
+    cap = H.etree.Element(f"{{{pns}}}caption"); cap.set("side", "TOP")  # position
+    sub9 = H.etree.SubElement(cap, f"{{{pns}}}subList")
+    cp9 = H.etree.SubElement(sub9, f"{{{pns}}}p"); cp9.set("paraPrIDRef", "1")  # alignment
+    crun9 = H.etree.SubElement(cp9, f"{{{pns}}}run"); crun9.set("charPrIDRef", "1")
+    H.etree.SubElement(crun9, f"{{{pns}}}t").text = "표 1. 생성된 캡션"
+    idx = next(i for i, c in enumerate(list(tbl9))
+               if H.etree.QName(c).localname == "outMargin")
+    tbl9.insert(idx + 1, cap)  # right after outMargin
+    tnew = H.XML_DECL + H.etree.tostring(r9)
+    tout = os.path.join(cd2, "t_edited.hwpx")
+    H.repack_preserve(torig, {"Contents/section0.xml": tnew}, tout)
+    zt = zipfile.ZipFile(tout)
+    tb = H.etree.fromstring(zt.read("Contents/section0.xml")).find(f".//{{{pns}}}tbl")
+    order = [H.etree.QName(c).localname for c in tb]
+    capn = tb.find(f"{{{pns}}}caption")
+    align9 = capn.find(f".//{{{pns}}}p").get("paraPrIDRef") if capn is not None else None
+    e9 = (order[:4] == ["sz", "pos", "outMargin", "caption"]
+          and capn is not None and capn.get("side") == "TOP" and align9 == "1"
+          and capn.find(f".//{{{pns}}}t").text == "표 1. 생성된 캡션"
+          and zt.testzip() is None
+          and zt.read("Contents/header.xml") == zipfile.ZipFile(torig).read("Contents/header.xml"))
+    ok &= e9
+    print(f"[{'PASS' if e9 else 'FAIL'}] 9. caption create+position+align "
+          f"(order={order[:4]}, side={capn.get('side') if capn is not None else None}, align={align9})")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1

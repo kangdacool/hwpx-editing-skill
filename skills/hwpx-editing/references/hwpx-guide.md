@@ -121,7 +121,7 @@ def repack_preserve(src, changed, out, added=None):
 - 셀 클론 시 **`cellSz.height`**=본문 282(헤더 0/282), **각 행 열폭 합 = 표 sz.width**(안 맞으면 거부).
 - 헤더 음영은 `borderFillIDRef` 분리(예 헤더 25, 본문 3). 긴 셀은 paraPr JUSTIFY+vertAlign TOP.
 - **병합**: 세로(rowSpan)=시작 tc `cellSpan rowSpan=N`, 이후 행은 **가려지는 col의 tc 생략** / 가로(colSpan)=시작 tc `colSpan` 키우고 **가려지는 tc 제거 + 너비 합산**.
-- 캡션 = `<hp:caption>` 안 마지막 `<hp:t>` 교체(autoNum은 한글 자동 번호). 배치는 `<hp:pos treatAsChar="1">`(인라인). 표 각주는 표 밖 별도 단락(작은 charPr).
+- 캡션(표/그림): **텍스트 편집**=`<hp:caption>` 안 마지막 `<hp:t>` 교체. **신규 생성**=`<hp:outMargin>` **직후**에 `<hp:caption side gap width lastWidth fullSz="0">` 삽입(ShapeObject 순서 `sz·pos·outMargin·caption·…` — 표는 caption 뒤 `inMargin·tr`, 그림은 caption 뒤 `shapeComment`). 본문은 **실제 셀 `subList` 복제** → 안의 `<hp:p>` run에 `<hp:t>` 세팅 후 `linesegarray` 제거. **위치**=`side` `TOP/BOTTOM/LEFT/RIGHT`(LEFT/RIGHT는 `width`가 캡션 열폭). **정렬**=캡션 `<hp:p>`의 `paraPrIDRef`(원하는 정렬의 기존 paraPr 재사용; 없으면 새 paraPr 추가 + `itemCnt` 갱신). `autoNum`은 한글 자동 번호. 표 각주는 표 밖 별도 단락(작은 charPr).
 
 **열 수 바꾸는 신규 표(2열→5×5 완전 예제)** — 담는 단락째 clone → tbl 초기화 → 헤더/본문 셀 템플릿 재조립:
 ```python
