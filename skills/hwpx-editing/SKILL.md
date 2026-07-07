@@ -1,15 +1,19 @@
 ---
 name: hwpx-editing
 description: >-
-  Safely read and edit HWPX (Hangul / 한글 .hwpx) word-processor files with
-  Python + lxml without corrupting them. Use this whenever the task involves a
-  .hwpx file, a 한글/Hangul document, HWPML, or Korean government/academic
-  documents — including reading or extracting text/tables, editing paragraphs,
-  tables, images, equations, footnotes/endnotes, or memos, fixing layout
-  (orphaned headings, blank pages, columns), building a table of contents, or
-  repackaging the zip. Trigger this even if the user only says "edit this 한글
-  file" or ".hwpx" and doesn't mention the internals, because naive edits
-  (re-zipping, stale line caches, cloned ids) make 한글 refuse to open the file.
+  Safely read, edit, and convert HWPX (Hangul / 한글 .hwpx) word-processor files
+  with Python + lxml without corrupting them. Use this whenever a task involves a
+  .hwpx file, a 한글 / Hangul / 한컴 (Hancom Office) document, HWPML, or a Korean
+  government / academic / 논문 / 보고서 document — including reading or extracting
+  text and tables (e.g. exporting complex merged tables to Excel / .xlsx), editing
+  paragraphs, tables, images, equations, footnotes/endnotes, or memos, adding or
+  positioning captions, fixing layout (orphaned headings, blank pages, columns),
+  building a table of contents, or repackaging the zip. Also trigger when a 한글
+  file "won't open" / "is corrupted" (파일이 깨졌다 / 한글에서 안 열린다), or when the
+  user hands you a legacy .hwp (this skill detects it and tells them to convert to
+  .hwpx first). Trigger even if the user only says "edit this 한글 file" or ".hwpx"
+  and doesn't mention the internals — naive edits (re-zipping, stale line caches,
+  cloned ids) make 한글 refuse to open the file.
 license: MIT
 ---
 
