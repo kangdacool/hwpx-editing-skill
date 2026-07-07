@@ -1,0 +1,63 @@
+name: 🐞 Bug report
+description: Something misbehaves — repack, verify, caption, table→Excel export, .hwp guard, etc.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **버그 제보 감사합니다.**
+
+        ⚠️ **Do not attach confidential documents. / 기밀 문서 첨부 금지.**
+        Reduce it to the **smallest, content-free `.hwpx`** that still reproduces the problem
+        (문제를 재현하는 **가장 작은 · 내용 없는 `.hwpx`** 로 줄여서 올려주세요).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / 무슨 일이 있었나요?
+      description: What you did and what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected / 기대한 결과
+    validations:
+      required: false
+  - type: textarea
+    id: command
+    attributes:
+      label: Command + console output / 실행 명령과 출력
+      description: e.g. `python scripts/verify.py edited.hwpx --orig orig.hwpx` and what it printed.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: sample
+    attributes:
+      label: Minimal .hwpx to reproduce / 재현용 최소 .hwpx
+      description: >-
+        Drag-and-drop a **small, non-confidential** `.hwpx` that reproduces it.
+        없으면 문서 구조(섹션/표/그림/수식/미주 개수)라도 적어주세요.
+    validations:
+      required: false
+  - type: input
+    id: hangul
+    attributes:
+      label: 한글 (Hancom Office) version
+      placeholder: e.g. 한글 2010 / 2020 / 2024
+    validations:
+      required: false
+  - type: input
+    id: env
+    attributes:
+      label: Environment (OS · Python · lxml / openpyxl)
+      placeholder: e.g. Windows 11, Python 3.13, lxml 5.4.0, openpyxl 3.1.5
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirm
+      options:
+        - label: The attached file (if any) contains no confidential content. / 첨부 파일에 기밀 내용이 없습니다.
+          required: true
