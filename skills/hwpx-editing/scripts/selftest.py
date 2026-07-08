@@ -373,6 +373,43 @@ def main() -> int:
     print(f"[{'PASS' if e13 else 'FAIL'}] 13. data→hwpx table insert "
           f"(rowSpan span+summed height, covered cell omitted)")
 
+    # 14. hwpx → Word (.docx): Hancom private-use glyphs stripped, and adjacent
+    #     tables kept separate (Word merges back-to-back tables). strip_pua is core
+    #     (lxml); the .docx build is skipped without python-docx.
+    assert H.strip_pua("ab") == "ab"  # PUA (category Co) removed
+    try:
+        import docx  # noqa: F401
+        import hwpx_to_docx as DX
+        _have_docx = True
+    except ImportError:
+        _have_docx = False
+    if _have_docx:
+        dsec = (H.XML_DECL + (
+            f'<sec xmlns:hp="{pns}">'
+            '<hp:p><hp:run><hp:t>제목</hp:t></hp:run></hp:p>'
+            '<hp:p><hp:run><hp:ctrl><hp:tbl rowCnt="1" colCnt="2"><hp:tr>'
+            + _c(0, 0, "A") + _c(1, 0, "B") + '</hp:tr></hp:tbl></hp:ctrl></hp:run></hp:p>'
+            '<hp:p><hp:run><hp:ctrl><hp:tbl rowCnt="1" colCnt="2"><hp:tr>'
+            + _c(0, 0, "C") + _c(1, 0, "D") + '</hp:tr></hp:tbl></hp:ctrl></hp:run></hp:p>'
+            '</sec>').encode("utf-8"))
+        cd5 = tempfile.mkdtemp(); dhwpx = os.path.join(cd5, "d.hwpx")
+        zf = zipfile.ZipFile(dhwpx, "w")
+        zi = zipfile.ZipInfo("mimetype"); zi.compress_type = zipfile.ZIP_STORED
+        zf.writestr(zi, b"application/hwp+zip")
+        zf.writestr("Contents/section0.xml", dsec); zf.close()
+        DX.convert(dhwpx, os.path.join(cd5, "d.docx"))
+        d = docx.Document(os.path.join(cd5, "d.docx"))
+        texts = [p.text for p in d.paragraphs]
+        kids = [c.tag.split("}")[-1] for c in d.element.body]
+        adj = sum(1 for i in range(len(kids) - 1) if kids[i] == "tbl" and kids[i + 1] == "tbl")
+        e14 = ("제목" in texts and "제목" not in texts
+               and len(d.tables) == 2 and adj == 0)
+        ok &= e14
+        print(f"[{'PASS' if e14 else 'FAIL'}] 14. hwpx→docx "
+              f"(PUA stripped, {len(d.tables)} tables, adjacent tbl→tbl={adj})")
+    else:
+        print("[SKIP] 14. hwpx→docx (python-docx not installed — pip install python-docx)")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1

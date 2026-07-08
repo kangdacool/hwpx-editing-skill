@@ -32,14 +32,14 @@ _SKIP = (f"{P}tc", f"{P}footNote", f"{P}endNote", f"{P}fieldBegin")
 
 def _para_text(p) -> str:
     """The paragraph's own text — excludes table-cell, footnote/endnote, field text."""
-    return "".join("".join(t.itertext()) for t in p.findall(f".//{P}t")
-                   if not any(a.tag in _SKIP for a in t.iterancestors())).strip()
+    return H.strip_pua("".join("".join(t.itertext()) for t in p.findall(f".//{P}t")
+                       if not any(a.tag in _SKIP for a in t.iterancestors())).strip())
 
 
 def _cell_text(tc) -> str:
     parts = ["".join(t.itertext()) for t in tc.findall(f".//{P}t")
              if next((a for a in t.iterancestors() if a.tag == f"{P}tc"), None) is tc]
-    txt = " ".join(" ".join(parts).split())
+    txt = H.strip_pua(" ".join(" ".join(parts).split()))
     if not txt and tc.find(f".//{P}equation") is not None:
         txt = "[수식]"
     if not txt and tc.find(f".//{P}pic") is not None:

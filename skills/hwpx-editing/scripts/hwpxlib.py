@@ -194,6 +194,14 @@ def section_names(z: zipfile.ZipFile) -> list[str]:
     return sorted(names, key=lambda n: int(re.search(r"section(\d+)", n).group(1)))
 
 
+def strip_pua(s: str) -> str:
+    """Drop Hancom private-use-area glyphs (Unicode category Co) — custom
+    bullets/numbers 한글 draws with its own font that show up as broken boxes
+    once the text is extracted outside 한글 (Word, Markdown, …)."""
+    import unicodedata
+    return "".join(ch for ch in s if unicodedata.category(ch) != "Co")
+
+
 def own(p) -> str:
     """The paragraph's *real* body text — 각주·미주·메모 본문을 제외한 진짜 본문
     (read-only extraction).
