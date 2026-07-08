@@ -313,6 +313,34 @@ def main() -> int:
     print(f"[{'PASS' if e11 else 'FAIL'}] 11. IDRef/itemCnt integrity: bad flagged "
           f"(itemcnt={len(rb['itemcnt'])} dangling={len(rb['dangling'])}), clean passes")
 
+    # 12. hwpx → Markdown extraction: body text, an inline footnote, and a table
+    #     must all render (lxml only — no extra deps).
+    import hwpx_to_markdown as MD
+    def _c(col, row, txt):
+        return (f'<hp:tc><hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="1"/><hp:subList><hp:p><hp:run>'
+                f'<hp:t>{txt}</hp:t></hp:run></hp:p></hp:subList></hp:tc>')
+    mdsec = (H.XML_DECL + (
+        f'<sec xmlns:hp="{pns}">'
+        '<hp:p><hp:run><hp:t>본문 텍스트</hp:t>'
+        '<hp:ctrl><hp:footNote><hp:subList><hp:p><hp:run><hp:t>각주내용</hp:t>'
+        '</hp:run></hp:p></hp:subList></hp:footNote></hp:ctrl></hp:run></hp:p>'
+        '<hp:p><hp:run><hp:ctrl><hp:tbl rowCnt="2" colCnt="2">'
+        '<hp:tr>' + _c(0, 0, "A") + _c(1, 0, "B") + '</hp:tr>'
+        '<hp:tr>' + _c(0, 1, "C") + _c(1, 1, "D") + '</hp:tr>'
+        '</hp:tbl></hp:ctrl></hp:run></hp:p></sec>').encode("utf-8"))
+    dd2 = tempfile.mkdtemp(); mpath = os.path.join(dd2, "m.hwpx")
+    zf = zipfile.ZipFile(mpath, "w")
+    zi = zipfile.ZipInfo("mimetype"); zi.compress_type = zipfile.ZIP_STORED
+    zf.writestr(zi, b"application/hwp+zip")
+    zf.writestr("Contents/section0.xml", mdsec); zf.close()
+    md = MD.to_markdown(mpath)
+    e12 = ("본문 텍스트" in md and "(각주: 각주내용)" in md
+           and "| A | B |" in md and "| --- | --- |" in md and "| C | D |" in md)
+    ok &= e12
+    print(f"[{'PASS' if e12 else 'FAIL'}] 12. hwpx→markdown (body + inline footnote + table): "
+          f"{'ok' if e12 else repr(md[:90])}")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1

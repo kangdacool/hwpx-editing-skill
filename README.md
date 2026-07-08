@@ -153,6 +153,7 @@ python skills/hwpx-editing/scripts/inspect_hwpx.py 내문서.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py 편집본.hwpx --orig 원본.hwpx
 python skills/hwpx-editing/scripts/selftest.py     # 파일 없이 동작 점검
 python skills/hwpx-editing/scripts/tables_to_xlsx.py 내문서.hwpx   # 표 전부 엑셀로(병합 보존)
+python skills/hwpx-editing/scripts/hwpx_to_markdown.py 내문서.hwpx  # 본문·표를 마크다운으로(LLM 요약용)
 ```
 
 ### 이 스킬이 막아주는 함정
@@ -293,6 +294,7 @@ python skills/hwpx-editing/scripts/inspect_hwpx.py mydoc.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py edited.hwpx --orig original.hwpx
 python skills/hwpx-editing/scripts/selftest.py     # sanity check, no file needed
 python skills/hwpx-editing/scripts/tables_to_xlsx.py mydoc.hwpx   # tables → Excel (merges preserved)
+python skills/hwpx-editing/scripts/hwpx_to_markdown.py mydoc.hwpx  # extract text/tables as Markdown
 ```
 
 ### The traps it protects you from
