@@ -329,6 +329,40 @@ def zip_integrity(z: zipfile.ZipFile) -> dict:
     }
 
 
+# Only these four IDRefs resolve cleanly to header ref-lists; binaryItemIDRef,
+# beginIDRef, memoShape/outlineShapeIDRef, linkListIDRef point elsewhere and are
+# skipped to avoid false positives (validated clean on real 한글 files).
+_IDREF_TARGETS = {"charPrIDRef": "charPr", "paraPrIDRef": "paraPr",
+                  "borderFillIDRef": "borderFill", "styleIDRef": "style"}
+
+
+def check_idref_integrity(z: zipfile.ZipFile) -> dict:
+    """Every charPr/paraPr/borderFill/style IDRef in the sections must exist in
+    header.xml, and each ref-list's `itemCnt` must equal its child count — a
+    dangling ref or stale itemCnt makes 한글 reject the file (§4). Returns
+    {'itemcnt': [...], 'dangling': [...]}; both empty means OK."""
+    hdr = etree.fromstring(z.read("Contents/header.xml"))
+    idsets, itemcnt = {}, []
+    for el in hdr.iter():
+        cnt = el.get("itemCnt")
+        if cnt is None:
+            continue
+        kids = list(el)
+        if cnt.isdigit() and int(cnt) != len(kids):
+            itemcnt.append(f"{etree.QName(el).localname}: itemCnt={cnt} vs {len(kids)} children")
+        for c in kids:
+            if c.get("id") is not None:
+                idsets.setdefault(etree.QName(c).localname, set()).add(c.get("id"))
+    dangling = []
+    for name in section_names(z):
+        for el in etree.fromstring(z.read(name)).iter():
+            for attr, val in el.attrib.items():
+                target = _IDREF_TARGETS.get(attr)
+                if target and val not in idsets.get(target, set()):
+                    dangling.append(f"{name}: {attr}={val} → no <{target} id={val}>")
+    return {"itemcnt": itemcnt, "dangling": dangling}
+
+
 def _norm(xml_bytes: bytes) -> list[str]:
     """Canonical, line-split serialization for minimal-change diffs (§7 diff)."""
     s = etree.tostring(etree.fromstring(xml_bytes), encoding="unicode")

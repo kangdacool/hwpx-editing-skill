@@ -73,7 +73,7 @@ pip install lxml openpyxl       # openpyxl: table→Excel export
 ```bash
 python skills/hwpx-editing/scripts/selftest.py
 ```
-You should see ten `PASS` lines and `RESULT: ALL PASS`.
+You should see a series of `PASS` lines ending in `RESULT: ALL PASS`.
 
 ---
 
@@ -146,4 +146,4 @@ pip install lxml openpyxl       # openpyxl: 표→엑셀 변환
 ```bash
 python skills/hwpx-editing/scripts/selftest.py
 ```
-`PASS` 10줄과 `RESULT: ALL PASS`가 보이면 정상입니다.
+`PASS` 줄들이 이어지고 마지막에 `RESULT: ALL PASS`가 보이면 정상입니다.

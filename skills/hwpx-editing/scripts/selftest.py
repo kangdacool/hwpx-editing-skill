@@ -286,6 +286,33 @@ def main() -> int:
     else:
         print("[SKIP] 10. table→xlsx (openpyxl not installed — pip install openpyxl)")
 
+    # 11. IDRef/itemCnt integrity: a dangling charPrIDRef or a stale itemCnt must be
+    #     caught; a clean file must pass (validated against real 한글 files — no
+    #     false positives).
+    hns2 = "http://www.hancom.co.kr/hwpml/2011/head"
+    def _idref_zip(path, itemcnt, ref):
+        zf = zipfile.ZipFile(path, "w")
+        zi = zipfile.ZipInfo("mimetype"); zi.compress_type = zipfile.ZIP_STORED
+        zf.writestr(zi, b"application/hwp+zip")
+        zf.writestr("Contents/header.xml", H.XML_DECL + (
+            f'<hh:head xmlns:hh="{hns2}"><hh:refList>'
+            f'<hh:charProperties itemCnt="{itemcnt}"><hh:charPr id="0"/></hh:charProperties>'
+            f'</hh:refList></hh:head>').encode("utf-8"))
+        zf.writestr("Contents/section0.xml", H.XML_DECL + (
+            f'<sec xmlns:hp="{pns}"><hp:p><hp:run charPrIDRef="{ref}">'
+            f'<hp:t>x</hp:t></hp:run></hp:p></sec>').encode("utf-8"))
+        zf.close()
+    dd = tempfile.mkdtemp()
+    bad = os.path.join(dd, "bad.hwpx"); _idref_zip(bad, "2", "9")    # itemCnt 2 vs 1 child; ref 9 dangling
+    good = os.path.join(dd, "good.hwpx"); _idref_zip(good, "1", "0")  # itemCnt ok; ref 0 exists
+    rb = H.check_idref_integrity(zipfile.ZipFile(bad))
+    rg = H.check_idref_integrity(zipfile.ZipFile(good))
+    e11 = (len(rb["itemcnt"]) == 1 and len(rb["dangling"]) == 1
+           and rg["itemcnt"] == [] and rg["dangling"] == [])
+    ok &= e11
+    print(f"[{'PASS' if e11 else 'FAIL'}] 11. IDRef/itemCnt integrity: bad flagged "
+          f"(itemcnt={len(rb['itemcnt'])} dangling={len(rb['dangling'])}), clean passes")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1

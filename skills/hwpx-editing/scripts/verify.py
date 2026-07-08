@@ -100,6 +100,13 @@ def main() -> int:
     else:
         _p(True, "3. no duplicate ids")
 
+    # 3b. IDRef/itemCnt integrity: dangling charPr/paraPr/borderFill/style refs or a
+    #     stale itemCnt make 한글 reject the file (§4 "added a charPr, forgot itemCnt").
+    ir = H.check_idref_integrity(z)
+    ir_bad = ir["itemcnt"] + ir["dangling"]
+    hard_ok &= _p(not ir_bad, "3b. IDRef/itemCnt integrity (charPr/paraPr/borderFill/style)",
+                  "" if not ir_bad else "; ".join(ir_bad[:6]))
+
     # 5. zip integrity (report before 4/6 which are informational)
     zi = H.zip_integrity(z)
     hard_ok &= _p(zi["testzip_ok"], "5a. zip testzip() ok")
