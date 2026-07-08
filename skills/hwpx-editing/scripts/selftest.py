@@ -341,6 +341,38 @@ def main() -> int:
     print(f"[{'PASS' if e12 else 'FAIL'}] 12. hwpx→markdown (body + inline footnote + table): "
           f"{'ok' if e12 else repr(md[:90])}")
 
+    # 13. Excel/CSV → HWPX table insert: a rowSpan merge from data must produce a
+    #     cell with the right span AND summed height, cloning the target's table,
+    #     and omit the covered cell. (lxml only — insert_table needs no openpyxl.)
+    import data_to_hwpx_table as DT
+    tgt_sec = (H.XML_DECL + (
+        f'<sec xmlns:hp="{pns}"><hp:p><hp:run><hp:ctrl>'
+        '<hp:tbl id="50" rowCnt="1" colCnt="1"><hp:sz width="40000" height="300"/>'
+        '<hp:pos/><hp:outMargin/><hp:inMargin/><hp:tr><hp:tc>'
+        '<hp:subList><hp:p id="0"><hp:run charPrIDRef="0"><hp:t>x</hp:t></hp:run></hp:p></hp:subList>'
+        '<hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+        '<hp:cellSz width="40000" height="300"/>'
+        '<hp:cellMargin left="0" right="0" top="0" bottom="0"/></hp:tc></hp:tr>'
+        '</hp:tbl></hp:ctrl></hp:run></hp:p></sec>').encode("utf-8"))
+    cd4 = tempfile.mkdtemp(); tgt = os.path.join(cd4, "t.hwpx")
+    zf = zipfile.ZipFile(tgt, "w")
+    zi = zipfile.ZipInfo("mimetype"); zi.compress_type = zipfile.ZIP_STORED
+    zf.writestr(zi, b"application/hwp+zip")
+    zf.writestr("Contents/section0.xml", tgt_sec); zf.close()
+    tout = os.path.join(cd4, "t_out.hwpx")
+    DT.insert_table(tgt, [["병합", "b"], ["", "d"]], [(0, 0, 2, 1)], tout)
+    q = f"{{{pns}}}"
+    nt = H.etree.fromstring(zipfile.ZipFile(tout).read("Contents/section0.xml")).findall(f".//{q}tbl")[-1]
+    c0 = nt.find(f".//{q}tc")  # first cell = (0,0), the rowSpan origin
+    e13 = (nt.get("rowCnt") == "2" and nt.get("colCnt") == "2"
+           and c0.find(f"{q}cellSpan").get("rowSpan") == "2"
+           and c0.find(f"{q}cellSz").get("height") == "600"          # 2 * 300 summed
+           and "".join(c0.itertext()) == "병합"
+           and len(nt.findall(f"{q}tr")[1].findall(f"{q}tc")) == 1)   # row1: covered col0 omitted
+    ok &= e13
+    print(f"[{'PASS' if e13 else 'FAIL'}] 13. data→hwpx table insert "
+          f"(rowSpan span+summed height, covered cell omitted)")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1
