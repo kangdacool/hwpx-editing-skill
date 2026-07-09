@@ -74,7 +74,7 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
 
 | Script | Purpose |
 |---|---|
-| `hwpxlib.py` | Library: `repack_preserve`, `own` (real body text, excludes 각주·미주·메모 / footnote·endnote·memo), `make_uid`, `strip_linesegarray`, `find_duplicate_ids`, `structural_counts`, plus §7 verify helpers. Import it. |
+| `hwpxlib.py` | Library: `repack_preserve`, `own` (real body text, excludes 각주·미주·메모 / footnote·endnote·memo), `make_uid`, `strip_linesegarray`, `find_duplicate_ids`, `structural_counts`, `replace_image` (swap a picture + update every geometry field incl. the easy-to-forget `imgDim`), plus §7 verify helpers. Import it. |
 | `inspect_hwpx.py FILE [--text] [--breaks]` | Structure dump; find hidden page/column breaks. |
 | `verify.py EDITED [--orig ORIG]` | Run the full §7 checklist; non-zero exit on failure (CI-gateable). |
 | `selftest.py` | Prove the repacker is lossless without a real file. |
@@ -95,8 +95,9 @@ failure modes)**; skim that first, then jump to:
 - **§2 Repack (raw-preserving)** — the crown-jewel repacker. Mirrors `hwpxlib`.
 - **§3 Common rules** — `linesegarray` removal, id-dedup after cloning.
 - **§4 Content editing** — paragraphs, tables (cell width sums must equal table
-  width or 한글 rejects it; merges), **images** (`orgSz`=px×75, size math, verify by
-  *content* not extraction order, matplotlib legibility "small figure, big text"),
+  width or 한글 rejects it; merges), **images** (`orgSz`=px×75, size math, swap via
+  `replace_image` so `imgDim` is never forgotten — a stale imgDim crops the picture;
+  verify by *content*/한글-render not extraction order, matplotlib legibility "small figure, big text"),
   formatting, **endnotes/footnotes** (`<hp:ctrl>` wrapping required), **memos**,
   and typo-audit scoping (no blanket regex).
 - **§5 Columns · TOC · equations** — `colPr`, `TABLEOFCONTENTS` from outline-level

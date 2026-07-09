@@ -235,6 +235,66 @@ def strip_linesegarray(el) -> int:
     return n
 
 
+def replace_image(pic, png_bytes, disp_w):
+    """Swap an <hp:pic>'s raster image and update EVERY geometry field together.
+
+    An HWPX picture stores its size in several elements that must agree, or 한글
+    mis-renders it. The one most often forgotten on an in-place swap is
+    ``<hp:imgDim>``: 한글 interprets ``<hp:imgClip>`` against imgDim, so a stale
+    imgDim (left over from the previous image) makes 한글 **crop the new image** —
+    the bottom is cut by exactly ``new_orgH / old_imgDim_h``. A structure check
+    passes; only a real 한글 render reveals the crop. This helper rewrites all of
+    them at once: orgSz, curSz, sz, imgDim, imgClip, imgRect(pt0..pt3), scaMatrix.
+
+    Args:
+        pic:       the ``<hp:pic>`` element (locate via its ``<hc:img>``
+                   ``binaryItemIDRef``).
+        png_bytes: the new image bytes; native pixel size is read from them.
+        disp_w:    display width in HWPUNIT (e.g. text-column width ~= 42520).
+                   Display height is derived to preserve the aspect ratio.
+
+    Returns:
+        ``(binaryItemIDRef, png_bytes)`` — add the bytes to ``repack_preserve``'s
+        ``changed`` under the BinData path that already exists in the manifest,
+        e.g. ``{f"BinData/{ref}.png": png_bytes}`` (the extension may be ``.bmp``
+        etc. — match the manifest ``href``). Only updates the picture geometry; it
+        does NOT touch ``content.hpf`` — if the image *format* changes, also update
+        that item's ``media-type`` there.
+
+    Verify by RENDERING in 한글 (see the guide's image / §7 render-verify recipe);
+    structural checks cannot catch a crop.
+    """
+    from PIL import Image  # optional dep — only image edits need Pillow
+
+    pw, ph = Image.open(io.BytesIO(png_bytes)).size
+    ow, oh = pw * 75, ph * 75                 # native HWPUNIT (px x 75, 96 dpi)
+    dw = int(disp_w)
+    dh = round(dw * ph / pw)                   # preserve aspect ratio
+
+    def _set(el, **kw):
+        if el is not None:
+            for k, v in kw.items():
+                el.set(k, str(v))
+
+    # orgSz/curSz/sz/imgDim/imgClip/imgRect/img are DIRECT children of <hp:pic>
+    # (per the HWPX schema) — direct finds avoid matching a caption subtree.
+    _set(pic.find(f"{P}orgSz"),   width=ow, height=oh)
+    _set(pic.find(f"{P}curSz"),   width=dw, height=dh)
+    _set(pic.find(f"{P}sz"),      width=dw, height=dh)
+    _set(pic.find(f"{P}imgDim"),  dimwidth=ow, dimheight=oh)   # <- forget => crop
+    _set(pic.find(f"{P}imgClip"), left=0, right=ow, top=0, bottom=oh)
+    rect = pic.find(f"{P}imgRect")
+    if rect is not None:
+        for nm, (x, y) in (("pt0", (0, 0)), ("pt1", (ow, 0)),
+                           ("pt2", (ow, oh)), ("pt3", (0, oh))):
+            _set(rect.find(f"{C}{nm}"), x=x, y=y)   # pt0..pt3 are hc:
+    ri = pic.find(f"{P}renderingInfo")              # <hc:scaMatrix> lives here
+    if ri is not None:
+        _set(ri.find(f"{C}scaMatrix"), e1=round(dw / ow, 6), e5=round(dh / oh, 6))
+    img = pic.find(f"{C}img")
+    return (img.get("binaryItemIDRef") if img is not None else None, png_bytes)
+
+
 _ID_ATTRS = ("id", "instId", "instid")
 
 

@@ -17,6 +17,7 @@
 8. **일괄 정규식 치환(띄어쓰기 등) → 코드·표 인접 셀 파괴.** 단위별 스캔·섹션 스코핑(§4).
 9. **텍스트 추출을 `.text`로만 → `itertext()` 미사용, 표 셀·메모 혼입.** `own()`으로 각주·미주·메모 제외, 셀은 개별 순회(§1).
 10. **컬럼폭 초과 표를 2단에 둠 → 잘림.** 1단 구역으로, 순서 유지는 secPr 블록 이동(§6-D).
+11. **이미지 in-place 교체 시 `imgDim` 미갱신 → 그림 아래 잘림.** 한글이 `imgClip`을 **옛 `imgDim`** 기준으로 해석(잘림비=새orgH/옛imgDimH). orgSz만 고치고 imgDim/scaMatrix를 빼먹기 쉽다 → **`hwpxlib.replace_image()`로 전 필드 일괄 갱신**(§4). 구조검증은 잘림을 못 잡으니 **한글로 렌더해 확인**(§7).
 
 ---
 
@@ -156,10 +157,21 @@ for row,vals in enumerate(all_rows):
 검증: `rowCnt`/`colCnt`, **각 행 셀 수=colCnt**, **각 행 열폭 합=표 sz.width**, 셀 텍스트, tbl 수 증가 + **id 중복 제거 pass**(§3, 클론 tbl이 원본 id 상속).
 
 **이미지**: 인라인 `<hc:img binaryItemIDRef="imageN">`(hc 네임스페이스).
-- **담는 단락째 clone** 후 `<hp:pic>` 교체: `binaryItemIDRef`·`id`·`instid` 새로, **크기(HWPUNIT)** — `orgSz`=native(**px×75**), `curSz`=`sz`=표시크기, `imgRect`/`imgClip`/`imgDim`=native 좌표, `scaMatrix e1=e5`=표시폭/native폭. linesegarray 제거.
+- **담는 단락째 clone** 후 `<hp:pic>` 교체: `binaryItemIDRef`·`id`·`instid` 새로, **크기(HWPUNIT)** — `orgSz`=native(**px×75**), `curSz`=`sz`=표시크기, `imgRect`/`imgClip`/**`imgDim`**=native 좌표, `scaMatrix e1=e5`=표시폭/native폭. linesegarray 제거.
+- **기존 그림만 교체(단락 유지)**: `hwpxlib.replace_image(pic, png_bytes, disp_w)` — orgSz·curSz·sz·**imgDim**·imgClip·imgRect·scaMatrix를 **한 번에** 갱신하고 `(binItemId, png_bytes)` 반환 → `repack_preserve(..., changed={f"BinData/{ref}.png": png_bytes, ...})`. ⚠️ **`imgDim`을 빼먹으면 한글이 `imgClip`을 옛 imgDim 기준으로 해석해 그림 아래를 자른다**(구조검증 통과, 렌더에서만 드러남). 손으로 필드를 고치지 말고 이 helper를 쓸 것.
 - 등록: content.hpf `<opf:manifest>`에 `<opf:item id="imageN" href="BinData/imageN.png" media-type="image/png" isEmbeded="1"/>`, 파일은 `added`로.
 - **표시폭 상한 ≈ 단폭**(2단 ≈ 26363), `DH=round(DW*native_h/native_w)`.
 - **내용으로 검증**: 추출 순서 ≠ 시각 순서일 수 있음. 밝기(그래프 vs 수식박스)·형태(막대 중앙 빈틈=Bimodal)로 확인 후 배치.
+- **한글 렌더 검증(그림·레이아웃 필수, Windows+한컴)**: LibreOffice는 hwpx 렌더 불가 → 구조검증만으론 잘림·여백·페이지깨짐을 못 잡는다. 한글 COM으로 PDF를 뽑아 **눈으로** 볼 것. 편집 전 `taskkill /F /IM Hwp.exe`로 파일락 해제.
+  ```python
+  import win32com.client as w, fitz            # pip install pywin32 pymupdf
+  hwp=w.Dispatch("HWPFrame.HwpObject"); hwp.RegisterModule("FilePathCheckDLL","SecurityModule")
+  hwp.Open(path,"HWPX","forceopen:true"); hwp.SaveAs(pdf,"PDF",""); hwp.Quit()
+  page=fitz.open(pdf)[i]
+  for im in page.get_images(full=True):        # 박힌 px 실측 → 잘림 진단
+      d=fitz.open(pdf).extract_image(im[0]); print(d['width'],d['height'])
+  page.get_pixmap(dpi=150).save("check.png")    # 사람이 볼 이미지
+  ```
 - **이미지 생성(matplotlib) 가독성**: 문서상 글씨크기 ≈ `png_폰트pt × (표시폭/캔버스폭)`. 표시폭이 캔버스폭보다 작으면 그만큼 축소됨 → **캔버스는 작게, 폰트는 크게**("그림 작게, 글씨 크게"). 텍스트 넘침은 `get_window_extent()`로 박스폭과 사전 비교. 한글 폰트는 `NotoSansCJK-*.ttc`를 `FontProperties(fname=…)`로 지정(Bold 별도 파일).
 
 **글자·문단 서식**: charPr=글자(색 `textColor`, 굵기 `<hh:bold>` 유무, 크기 `height`=pt×100), paraPr=문단(정렬·개요수준·줄간격). **기존 정의 재사용이 가장 안전** — 새로 추가하면 `<hh:charProperties>`/`<hh:paraProperties>`의 `itemCnt` 갱신 필수(불일치 시 거부). placeholder·강조에서 복사한 텍스트는 색·굵기를 물려받으니 **최종 서식 charPr로 교체**.
