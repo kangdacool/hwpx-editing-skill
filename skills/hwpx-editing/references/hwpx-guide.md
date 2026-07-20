@@ -18,6 +18,8 @@
 9. **텍스트 추출을 `.text`로만 → `itertext()` 미사용, 표 셀·메모 혼입.** `own()`으로 각주·미주·메모 제외, 셀은 개별 순회(§1).
 10. **컬럼폭 초과 표를 2단에 둠 → 잘림.** 1단 구역으로, 순서 유지는 secPr 블록 이동(§6-D).
 11. **이미지 in-place 교체 시 `imgDim` 미갱신 → 그림 아래 잘림.** 한글이 `imgClip`을 **옛 `imgDim`** 기준으로 해석(잘림비=새orgH/옛imgDimH). orgSz만 고치고 imgDim/scaMatrix를 빼먹기 쉽다 → **`hwpxlib.replace_image()`로 전 필드 일괄 갱신**(§4). 구조검증은 잘림을 못 잡으니 **한글로 렌더해 확인**(§7).
+12. **`fontRef`의 lang별 인덱스를 같은 글꼴로 착각.** fontface 배열은 **lang마다 순서가 다르다** — `hangul="6"`과 `latin="6"`이 서로 다른 글꼴을 가리킬 수 있다. **인덱스가 아니라 이름으로 비교**(§4-서식 감사).
+13. **`align=JUSTIFY` + `breakLatinWord="KEEP_WORD"` → 영문 근처 자간이 벌어짐.** 긴 영문 토큰을 줄 끝에서 못 쪼개니 양쪽정렬이 단어 사이 공백을 늘린다. 한글 본문에 영문 용어·서지가 섞이면 눈에 띄게 들쭉날쭉해진다(§4-서식 감사).
 
 ---
 
@@ -175,6 +177,16 @@ for row,vals in enumerate(all_rows):
 - **이미지 생성(matplotlib) 가독성**: 문서상 글씨크기 ≈ `png_폰트pt × (표시폭/캔버스폭)`. 표시폭이 캔버스폭보다 작으면 그만큼 축소됨 → **캔버스는 작게, 폰트는 크게**("그림 작게, 글씨 크게"). 텍스트 넘침은 `get_window_extent()`로 박스폭과 사전 비교. 한글 폰트는 `NotoSansCJK-*.ttc`를 `FontProperties(fname=…)`로 지정(Bold 별도 파일).
 
 **글자·문단 서식**: charPr=글자(색 `textColor`, 굵기 `<hh:bold>` 유무, 크기 `height`=pt×100), paraPr=문단(정렬·개요수준·줄간격). **기존 정의 재사용이 가장 안전** — 새로 추가하면 `<hh:charProperties>`/`<hh:paraProperties>`의 `itemCnt` 갱신 필수(불일치 시 거부). placeholder·강조에서 복사한 텍스트는 색·굵기를 물려받으니 **최종 서식 charPr로 교체**.
+
+**서식 감사 (글꼴·크기 일관성)** — 구조검증(verify.py)이 못 잡는 대표 육안 결함. `python scripts/audit_typography.py FILE.hwpx [--expect-face 휴먼명조] [--expect-body-pt 10]`으로 **실제 사용되는 charPr을 사용횟수·크기·글꼴로 집계**한다. 결함은 대개 소수 charPr에만 몰려 있어 집계하면 즉시 드러난다.
+- **fontface 인덱스는 lang마다 배열이 다르다.** `<hh:fontface lang="HANGUL">`과 `lang="LATIN"`의 `<hh:font>` 순서가 서로 달라서, `<hh:fontRef hangul="6" latin="6"/>`이 **같은 글꼴이라는 보장이 없다.** 반드시 각 lang 배열을 따로 인덱싱해 **이름으로** 비교할 것. 글꼴을 바꿀 때도 lang별로 인덱스를 다시 찾아 넣는다.
+  ```python
+  faces={ff.get('lang'):[f.get('face') for f in ff.iter(H+'font')] for ff in hd.iter(H+'fontface')}
+  han_i=faces['HANGUL'].index('휴먼명조'); lat_i=faces['LATIN'].index('휴먼명조')   # 값이 다를 수 있다
+  ```
+- **영문 근처 자간 깨짐** = `align=JUSTIFY` + `breakSetting/@breakLatinWord="KEEP_WORD"`. 긴 영문 토큰을 줄 끝에서 못 쪼개니 양쪽정렬이 공백을 늘려 벌린다. 참고문헌처럼 **영문 비율이 높은 문단은 해당 paraPr을 LEFT로**. 바꾸기 전 **그 paraPr이 대상 문단 전용인지 사용 횟수를 세어 확인**하면 새 정의 추가(=`itemCnt` 갱신) 없이 안전하다.
+- 본문 글꼴이 섞이는 전형적 위치: **참고문헌·그림 캡션·빈 문단**. 다른 문서에서 붙여넣은 흔적이 여기 남는다. 빈 문단도 고쳐 둘 것 — 나중에 글자를 넣는 순간 글꼴이 튄다.
+- 크기는 **제목과 본문이 같은 pt면 위계가 없다**. 본문을 줄일 때 제목 charPr을 함께 건드리지 않도록 id를 분리해 확인한다.
 
 **미주·각주(endNote/footNote)**: **`<hp:ctrl>` 래핑 필수.** 한 run 안에서 **`[t 앞][ctrl>endNote][t 뒤]`로 인라인 삽입**(기존 미주 run을 clone하면 구조 보장). 번호는 한글이 위치 기준 자동 재계산 → 순서대로 삽입. 각주는 `endNote`→`footNote`, autoNum `numType`을 `ENDNOTE`→`FOOTNOTE`로만 변경. **클론 함정**: `endNote`의 `instId`뿐 아니라 내부 `subList>p`의 **id도 새로 부여**(안 하면 중복 → 불안정). 본문 추출은 `own()`으로 제외(§1).
 

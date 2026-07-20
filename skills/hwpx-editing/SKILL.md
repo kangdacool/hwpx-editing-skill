@@ -79,6 +79,7 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
 | `verify.py EDITED [--orig ORIG]` | Run the full §7 checklist; non-zero exit on failure (CI-gateable). |
 | `selftest.py` | Prove the repacker is lossless without a real file. |
 | `tables_to_xlsx.py FILE [OUT]` | Export tables to Excel (.xlsx), merged cells preserved (needs `openpyxl`). Cells with only an image/equation → `[그림]`/`[수식]`; legacy `.hwp` is refused with guidance. |
+| `audit_typography.py FILE [--expect-face 이름] [--expect-body-pt N]` | 서식 일관성 감사: 실제 쓰이는 charPr을 사용횟수·크기·글꼴로 집계. **글꼴 혼재**와 **JUSTIFY+KEEP_WORD 영문 문단**(자간 벌어짐)을 잡는다. `--expect-*`를 주면 어긋날 때 종료코드 1. |
 | `hwpx_to_markdown.py FILE [OUT.md]` | Extract the document's text + tables as Markdown (for an LLM to read/summarize; no OUT → stdout). |
 | `hwpx_to_docx.py FILE [OUT.docx]` | Export to Word (.docx), tables + merged cells preserved (needs `python-docx`; for journals / non-한글 co-authors). |
 | `data_to_hwpx_table.py DATA.(xlsx\|csv) TARGET.hwpx [OUT] [--sheet]` | Insert an Excel/CSV table into a 한글 doc, merged cells preserved (needs `openpyxl` for xlsx; TARGET must contain a table for cell styling; CSV encoding auto). |
