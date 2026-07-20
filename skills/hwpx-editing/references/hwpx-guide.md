@@ -19,7 +19,8 @@
 10. **컬럼폭 초과 표를 2단에 둠 → 잘림.** 1단 구역으로, 순서 유지는 secPr 블록 이동(§6-D).
 11. **이미지 in-place 교체 시 `imgDim` 미갱신 → 그림 아래 잘림.** 한글이 `imgClip`을 **옛 `imgDim`** 기준으로 해석(잘림비=새orgH/옛imgDimH). orgSz만 고치고 imgDim/scaMatrix를 빼먹기 쉽다 → **`hwpxlib.replace_image()`로 전 필드 일괄 갱신**(§4). 구조검증은 잘림을 못 잡으니 **한글로 렌더해 확인**(§7).
 12. **`fontRef`의 lang별 인덱스를 같은 글꼴로 착각.** fontface 배열은 **lang마다 순서가 다르다** — `hangul="6"`과 `latin="6"`이 서로 다른 글꼴을 가리킬 수 있다. **인덱스가 아니라 이름으로 비교**(§4-서식 감사).
-13. **`align=JUSTIFY` + `breakLatinWord="KEEP_WORD"` → 영문 근처 자간이 벌어짐.** 긴 영문 토큰을 줄 끝에서 못 쪼개니 양쪽정렬이 단어 사이 공백을 늘린다. 한글 본문에 영문 용어·서지가 섞이면 눈에 띄게 들쭉날쭉해진다(§4-서식 감사).
+13. **문단 복제 템플릿으로 첫 문단 사용 → secPr 중복 + 텍스트 run 소실.** 섹션 첫 `<hp:p>`가 `secPr`를 품는다. 템플릿은 **secPr 없는 문단**에서 고른다(§3).
+14. **`align=JUSTIFY` + `breakLatinWord="KEEP_WORD"` → 영문 근처 자간이 벌어짐.** 긴 영문 토큰을 줄 끝에서 못 쪼개니 양쪽정렬이 단어 사이 공백을 늘린다. 한글 본문에 영문 용어·서지가 섞이면 눈에 띄게 들쭉날쭉해진다(§4-서식 감사).
 
 ---
 
@@ -113,6 +114,18 @@ def repack_preserve(src, changed, out, added=None):
       return uid
   ```
   미주 클론은 내부 `subList>p`의 id까지, 표 클론은 `tbl`·`tc`·`p` id까지 새로 준다.
+- **문단 템플릿으로 첫 문단을 고르지 말 것.** 섹션의 **첫 `<hp:p>`가 `<hp:secPr>`를 품는다**(용지·여백·머리말 정의). 복제하면 secPr이 중복되고, 그 문단은 run[0]이 secPr 담당이라 `run[1:]`를 지우는 순간 **텍스트가 든 run이 통째로 날아간다**(조용히 빈 문단이 됨). 템플릿은 **secPr 없고 `<hp:t>`가 있는 문단**에서 고르고, 텍스트를 넣기 전에 잉여 run을 먼저 제거한 뒤 `<hp:t>` 존재를 단정문으로 확인한다.
+  ```python
+  def pick(style):                      # 템플릿 선택
+      for p in kids:
+          if p.get('styleIDRef')==style and p.find(f'.//{P}secPr') is None and text_of(p):
+              return p
+  # 복제 시: 잉여 run 제거 → t 존재 확인 → 텍스트 주입 (순서 중요)
+  for r in n.findall(f'.//{P}run')[1:]: r.getparent().remove(r)
+  ts=n.findall(f'.//{P}t'); assert ts, 'secPr 문단을 고른 것은 아닌지 확인'
+  ts[0].text = s
+  ```
+  빌드 후 `len(list(sec.iter(f'{P}secPr'))) == 1`로 중복을 확인한다.
 
 ---
 
