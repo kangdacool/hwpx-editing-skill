@@ -21,6 +21,7 @@ from __future__ import annotations
 import io
 import re
 import struct
+import copy
 import zipfile
 import zlib
 
@@ -296,6 +297,80 @@ def replace_image(pic, png_bytes, disp_w):
 
 
 _ID_ATTRS = ("id", "instId", "instid")
+
+
+def pick_template(paras, style=None, need_text=True):
+    """복제 템플릿으로 쓸 문단을 고른다. **secPr 보유 문단을 배제한다.**
+
+    섹션의 첫 <hp:p>는 <hp:secPr>(용지·여백·머리말)를 품는다. 그것을 템플릿으로 쓰면
+    secPr이 중복되고, run[0]이 secPr 담당이라 잉여 run을 지우는 순간 텍스트 run이
+    통째로 사라진다(오류 없이 빈 문단이 된다).
+    """
+    for p in paras:
+        if style is not None and p.get("styleIDRef") != str(style):
+            continue
+        if p.find(f".//{P}secPr") is not None:
+            continue
+        if need_text and not p.findall(f".//{P}t"):
+            continue
+        return p
+    raise ValueError(f"조건에 맞는 템플릿 문단 없음 (style={style})")
+
+
+def clone_para(template, uid, content):
+    """문단을 복제해 텍스트를 채운다. 서식을 뭉개지 않는다.
+
+    content:
+      str                      단일 run 문단 — 첫 run만 남기고 텍스트를 넣는다
+      [(charPrIDRef, text), …] 다중 run 문단 — 조각마다 run을 만든다
+
+    ⚠️ 흔한 사고: 참고문헌처럼 run마다 charPr이 다른 문단(저자 bold / 제목 plain /
+       저널 italic)을 "run[1:] 제거 후 t[0]에 전체 텍스트 주입"으로 복제하면
+       **run[0]의 서식이 문단 전체에 먹는다.** 구조검증으로는 안 잡히고 렌더에서만 보인다.
+       조각으로 넘겨서 run 단위로 채울 것. 조각 경계의 공백도 원본을 따라간다.
+    """
+    from lxml import etree
+    if template.find(f".//{P}secPr") is not None:
+        raise ValueError("secPr 보유 문단은 템플릿으로 쓸 수 없다 — pick_template()을 쓸 것")
+
+    n = copy.deepcopy(template)
+    n.set("id", str(uid()))
+    strip_linesegarray(n)
+
+    runs = n.findall(f".//{P}run")
+    if not runs:
+        raise ValueError("템플릿에 <hp:run>이 없다")
+
+    if isinstance(content, str):
+        content = [(runs[0].get("charPrIDRef"), content)]
+
+    parent = runs[0].getparent()
+    by_cp = {r.get("charPrIDRef"): r for r in runs}
+    for r in runs:
+        parent.remove(r)
+
+    for cpid, text in content:
+        base = by_cp.get(cpid, runs[0])
+        r = copy.deepcopy(base)
+        r.set("charPrIDRef", cpid)
+        strip_linesegarray(r)
+        ts = r.findall(f"{P}t")
+        if not ts:
+            ts = [etree.SubElement(r, P + "t")]
+        ts[0].text = text
+        for t in ts[1:]:
+            t.getparent().remove(t)
+        parent.append(r)
+    return n
+
+
+def run_patterns(paras):
+    """문단들의 run charPr 패턴을 뽑는다. 서식 균일성 단정문에 쓴다.
+
+        pats = run_patterns([p for p in sec if p.get('paraPrIDRef') == '59'])
+        assert len(set(pats)) == 1, f"참고문헌 서식 불균일: {set(pats)}"
+    """
+    return [tuple(r.get("charPrIDRef") for r in p.findall(f".//{P}run")) for p in paras]
 
 
 def make_uid(root):

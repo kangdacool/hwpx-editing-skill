@@ -74,7 +74,7 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
 
 | Script | Purpose |
 |---|---|
-| `hwpxlib.py` | Library: `repack_preserve`, `own` (real body text, excludes 각주·미주·메모 / footnote·endnote·memo), `make_uid`, `strip_linesegarray`, `find_duplicate_ids`, `structural_counts`, `replace_image` (swap a picture + update every geometry field incl. the easy-to-forget `imgDim`), plus §7 verify helpers. Import it. |
+| `hwpxlib.py` | Library: `repack_preserve`, `pick_template`/`clone_para`/`run_patterns` (문단 복제 — 직접 하지 말 것), `own` (real body text, excludes 각주·미주·메모 / footnote·endnote·memo), `make_uid`, `strip_linesegarray`, `find_duplicate_ids`, `structural_counts`, `replace_image` (swap a picture + update every geometry field incl. the easy-to-forget `imgDim`), plus §7 verify helpers. Import it. |
 | `inspect_hwpx.py FILE [--text] [--breaks]` | Structure dump; find hidden page/column breaks. |
 | `verify.py EDITED [--orig ORIG]` | Run the full §7 checklist; non-zero exit on failure (CI-gateable). |
 | `selftest.py` | Prove the repacker is lossless without a real file. |
