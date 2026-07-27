@@ -223,6 +223,87 @@ def own(p) -> str:
 
 
 # ---------------------------------------------------------------------------
+# §3-bis. Write-side text edits (.tail-safe) — the counterpart to own()
+#   Run text lives in <hp:t>.text AND in the .tail of inline children
+#   (lineBreak, markpenBegin/End, …). A find/replace that only reads .text
+#   silently misses everything after a <hp:lineBreak/>. own() already avoids
+#   this on the read side (itertext); these give edits the same safety so you
+#   never hand-roll a t.text-only helper again.
+# ---------------------------------------------------------------------------
+def _text_nodes(p, body_only=True):
+    """Yield (node, attr) for every text-bearing position under `p`: each
+    <hp:t>.text plus the .tail of its inline descendants. body_only skips text
+    nested in 각주·미주·메모 (footNote/endNote/fieldBegin), matching own()."""
+    skip = (f"{P}footNote", f"{P}endNote", f"{P}fieldBegin")
+    for t in p.findall(f".//{P}t"):
+        if body_only and any(a.tag in skip for a in t.iterancestors()):
+            continue
+        if t.text:
+            yield t, "text"
+        for d in t.iterdescendants():
+            if d.tail:
+                yield d, "tail"
+
+
+def replace_text(p, old, new, count=0):
+    """Replace `old`→`new` in a paragraph's real body text, .tail-safe.
+    count=0 replaces all occurrences; otherwise up to `count`. Returns the number
+    replaced. A match that straddles an inline-child boundary (rare) is NOT
+    handled — pick a shorter anchor or edit structurally."""
+    done = 0
+    for node, attr in _text_nodes(p):
+        s = getattr(node, attr)
+        if not s or old not in s:
+            continue
+        k = s.count(old) if count == 0 else min(s.count(old), count - done)
+        if k <= 0:
+            break
+        setattr(node, attr, s.replace(old, new, k))
+        done += k
+        if count and done >= count:
+            break
+    return done
+
+
+def insert_ctrls_after(p, phrase, ctrls):
+    """Insert inline ctrl nodes (e.g. cloned endnote <hp:ctrl>s — clone with fresh
+    ids yourself first) right after the first `phrase`, splitting the host <hp:t>
+    so trailing text survives. Anchors on <hp:t>.text only. Returns True on
+    success; False if `phrase` isn't in any plain .text (e.g. it lands after a
+    lineBreak) — choose another anchor or handle the tail case explicitly."""
+    skip = (f"{P}footNote", f"{P}endNote", f"{P}fieldBegin")
+    for t in p.findall(f".//{P}t"):
+        if any(a.tag in skip for a in t.iterancestors()):
+            continue
+        if t.text and phrase in t.text:
+            i = t.text.index(phrase) + len(phrase)
+            before, after = t.text[:i], t.text[i:]
+            run = t.getparent(); pos = list(run).index(t)
+            t.text = before; k = pos + 1
+            for c in ctrls:
+                run.insert(k, c); k += 1
+            if after:
+                nt = etree.Element(f"{P}t"); nt.text = after; run.insert(k, nt)
+            return True
+    return False
+
+
+def find_para(root_or_paras, contains=None, starts=None):
+    """First <hp:p> whose own() text contains / startswith the given string.
+    Prefer a SHORT, ASCII-safe anchor: long Korean phrases break on Unicode
+    lookalikes — 가운뎃점 ·(U+00B7/2027/318D/30FB), –—dashes, NBSP(U+00A0)."""
+    paras = root_or_paras.iter(f"{P}p") if hasattr(root_or_paras, "iter") \
+        else root_or_paras
+    for p in paras:
+        s = own(p)
+        if contains is not None and contains in s:
+            return p
+        if starts is not None and s.strip().startswith(starts):
+            return p
+    return None
+
+
+# ---------------------------------------------------------------------------
 # §3. Common edit rules (linesegarray · ids)
 # ---------------------------------------------------------------------------
 def strip_linesegarray(el) -> int:
@@ -371,6 +452,79 @@ def run_patterns(paras):
         assert len(set(pats)) == 1, f"참고문헌 서식 불균일: {set(pats)}"
     """
     return [tuple(r.get("charPrIDRef") for r in p.findall(f".//{P}run")) for p in paras]
+
+
+def read_memos(sec):
+    """검토 메모(reviewer memo)를 읽는다. 반환: [{id, fieldid, author, date, text}, ...].
+
+    ⚠️ 메모는 `<hp:memo>`가 아니라 **`<hp:fieldBegin type="MEMO">`** 이다
+       (`.//hp:memo`로 찾으면 0개 — 흔한 오진). 구조:
+         <hp:ctrl><hp:fieldBegin type="MEMO" id=X fieldid=Y>
+             <hp:parameters>…Author, CreateDateTime…</hp:parameters>
+             <hp:subList>…메모 텍스트…</hp:subList></hp:fieldBegin></hp:ctrl>
+           <hp:t>걸린 본문</hp:t>
+         <hp:ctrl><hp:fieldEnd beginIDRef=X fieldid=Y/></hp:ctrl>
+    """
+    out = []
+    for fb in sec.iter(f"{P}fieldBegin"):
+        if fb.get("type") != "MEMO":
+            continue
+        params = {sp.get("name"): sp.text for sp in fb.findall(f".//{P}stringParam")}
+        text = "".join("".join(t.itertext())
+                       for t in fb.findall(f".//{P}subList//{P}t")).strip()
+        out.append({"id": fb.get("id"), "fieldid": fb.get("fieldid"),
+                    "author": params.get("Author", ""),
+                    "date": params.get("CreateDateTime", ""), "text": text})
+    return out
+
+
+def delete_memo(sec, memo_id=None):
+    """메모 제거 — MEMO fieldBegin ctrl + 매칭 fieldEnd ctrl 제거, 걸린 본문 <hp:t>는 유지.
+
+    memo_id=None이면 섹션 내 모든 메모 삭제. 한글의 '메모 삭제' 결과와 본문 텍스트 동일함을 검증함
+    (header의 memoProperties 도형 정의는 건드리지 않는다 — 무해). 반환: 제거한 메모 수.
+    """
+    def _drop(el):                       # ctrl로 감싸졌으면 ctrl째, 아니면 el만
+        parent = el.getparent()
+        if parent is not None and etree.QName(parent).localname == "ctrl":
+            parent.getparent().remove(parent)
+        elif parent is not None:
+            parent.remove(el)
+
+    removed = 0
+    for fb in list(sec.iter(f"{P}fieldBegin")):
+        if fb.get("type") != "MEMO" or (memo_id and fb.get("id") != memo_id):
+            continue
+        fid = fb.get("id")
+        _drop(fb)
+        for fe in list(sec.iter(f"{P}fieldEnd")):
+            if fe.get("beginIDRef") == fid:
+                _drop(fe)
+        removed += 1
+    return removed
+
+
+def read_track_changes(sec):
+    """변경추적(reviewer)을 읽는다. 반환: {"insert": [텍스트…], "delete": [텍스트…]}.
+
+    삽입=`<hp:insertBegin/>…텍스트…<hp:insertEnd/>`, 삭제=`<hp:deleteBegin/>…<hp:deleteEnd/>`
+    (빈 마커=문단분리/서식). 작성자·시각은 header.xml `<hp:trackChange type="Insert/Delete/
+    CharShape" date author…/>`. ⚠️ **수용/거부는 XML로 하지 말 것**(마커+삭제내용 제거가 까다로워
+    파일 손상 위험). **한글 COM으로**:
+        hwp.HAction.Run("TrackChangeApplyAll")   # 전부 수용
+        hwp.HAction.Run("TrackChangeCancelAll")  # 전부 거부
+      ★ 반환값이 False여도 실제 적용됨 — insertBegin/deleteBegin 카운트가 0인지로 검증할 것.
+      (전 문서 적용이므로, 특정 장만 처리하려면 사본에서 하거나 해당 범위만 남기고 작업)
+    """
+    import re
+    xml = etree.tostring(sec, encoding="unicode")
+    strip = lambda s: re.sub(r"<[^>]+>", "", s)
+    ins = [strip(m.group(1)) for m in
+           re.finditer(r"<[a-z]+:insertBegin[^>]*/>(.*?)<[a-z]+:insertEnd", xml, re.S)]
+    dele = [strip(m.group(1)) for m in
+            re.finditer(r"<[a-z]+:deleteBegin[^>]*/>(.*?)<[a-z]+:deleteEnd", xml, re.S)]
+    return {"insert": [t for t in ins if t.strip()],
+            "delete": [t for t in dele if t.strip()]}
 
 
 def make_uid(root):

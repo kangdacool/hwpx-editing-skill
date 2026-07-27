@@ -410,6 +410,25 @@ def main() -> int:
     else:
         print("[SKIP] 14. hwpx→docx (python-docx not installed — pip install python-docx)")
 
+    # 15. .tail-safe text edits: HWPX stores run text in <hp:t>.text AND in the
+    #     .tail of inline children (e.g. after <hp:lineBreak/>). A t.text-only
+    #     find/replace silently misses tail text — the exact trap own() avoids on
+    #     read. Prove replace_text hits tail text, insert_ctrls_after splits a
+    #     .text anchor, and find_para matches on content.
+    para = H.etree.fromstring((
+        f'<hp:p xmlns:hp="{pns}"><hp:run charPrIDRef="0">'
+        '<hp:t>앞문장 anchor다.<hp:lineBreak/>뒷문장(그림 **)에 끝.</hp:t>'
+        '</hp:run></hp:p>').encode("utf-8"))
+    n_tail = H.replace_text(para, "(그림 **)", "(그림 18)")   # match lives in a .tail
+    ins = H.insert_ctrls_after(para, "anchor다.",
+                               [H.etree.fromstring(f'<hp:ctrl xmlns:hp="{pns}"/>')])
+    found = H.find_para(para, contains="그림 18") is not None
+    ctrl_in_run = para.find(f".//{{{pns}}}ctrl") is not None
+    e15 = (n_tail == 1 and "(그림 18)" in H.own(para) and ins and ctrl_in_run and found)
+    ok &= e15
+    print(f"[{'PASS' if e15 else 'FAIL'}] 15. .tail-safe edits: replace_text hits "
+          f"lineBreak tail ({n_tail}), insert_ctrls_after splits .text ({ins}), find_para ({found})")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1
