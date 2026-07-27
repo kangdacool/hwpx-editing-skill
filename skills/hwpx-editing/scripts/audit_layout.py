@@ -18,6 +18,10 @@ With no ``--pdf`` the script renders the file itself through 한글 COM
 (Windows + 한컴오피스 required) into a temporary PDF. Pass ``--pdf`` to reuse a
 render you already have, or to audit on a machine without 한글.
 
+Checks 1–4 read the PDF only, so they are **format-agnostic**: render a DOCX with
+Word COM and pass that PDF to audit a Word deliverable the same way. Only check 5
+needs the .hwpx itself and is skipped for other formats.
+
 Exit code is non-zero when any check reports a finding, so it can gate a build.
 """
 import argparse
@@ -135,21 +139,25 @@ def check_table_widths(hwpx_path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("hwpx")
+    ap.add_argument("hwpx", help="감사 대상 (.hwpx). 다른 포맷은 --pdf 와 함께 넘기면 렌더 검사만 수행")
     ap.add_argument("--pdf", help="use this render instead of rendering now")
     ap.add_argument("--sparse", type=int, default=320,
                     help="pages with fewer body chars than this are reported")
     args = ap.parse_args()
-    hwpxlib.ensure_hwpx(args.hwpx)
+    if args.hwpx.lower().endswith(".hwpx"):
+        hwpxlib.ensure_hwpx(args.hwpx)
 
     findings = 0
-    width_hits = check_table_widths(args.hwpx)
-    print("== 표 폭 합계 ==")
+    # --pdf 로 넘어온 렌더는 DOCX 등 다른 포맷일 수도 있다. 그 경우 구조 검사는 건너뛰고
+    # 렌더 기반 검사(줄바꿈·희박 페이지·목차)만 돌린다 — 이 셋은 포맷과 무관하다.
+    is_hwpx = args.hwpx.lower().endswith(".hwpx")
+    width_hits = check_table_widths(args.hwpx) if is_hwpx else []
+    print("== 표 폭 합계 ==" if is_hwpx else "== 표 폭 합계 (hwpx 아님 — 생략) ==")
     if width_hits:
         findings += len(width_hits)
         for where, d in width_hits:
             print("   [FAIL] %s  %s" % (where, d))
-    else:
+    elif is_hwpx:
         print("   [ok] 모든 행의 셀 폭 합 = 표 폭")
 
     try:
@@ -160,6 +168,9 @@ def main():
 
     pdf = args.pdf
     tmp = None
+    if not pdf and not is_hwpx:
+        print("\nhwpx 가 아니면 --pdf 로 렌더본을 넘겨야 합니다")
+        return 1 if findings else 0
     if not pdf:
         tmp = os.path.join(tempfile.gettempdir(), "_audit_layout.pdf")
         try:
