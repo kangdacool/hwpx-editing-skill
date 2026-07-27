@@ -20,7 +20,10 @@
 11. **이미지 in-place 교체 시 `imgDim` 미갱신 → 그림 아래 잘림.** 한글이 `imgClip`을 **옛 `imgDim`** 기준으로 해석(잘림비=새orgH/옛imgDimH). orgSz만 고치고 imgDim/scaMatrix를 빼먹기 쉽다 → **`hwpxlib.replace_image()`로 전 필드 일괄 갱신**(§4). 구조검증은 잘림을 못 잡으니 **한글로 렌더해 확인**(§7).
 12. **`fontRef`의 lang별 인덱스를 같은 글꼴로 착각.** fontface 배열은 **lang마다 순서가 다르다** — `hangul="6"`과 `latin="6"`이 서로 다른 글꼴을 가리킬 수 있다. **인덱스가 아니라 이름으로 비교**(§4-서식 감사).
 13. **문단을 손으로 복제 → 서식 뭉갬·secPr 중복.** run마다 charPr이 다른 문단(참고문헌 등)에서 "run[1:] 제거 후 t[0]에 전체 텍스트"를 하면 **run[0] 서식이 문단 전체에 먹고**, 섹션 첫 문단을 템플릿으로 쓰면 **secPr이 중복되며 텍스트 run이 사라진다**. → **`hwpxlib.pick_template()` + `clone_para()`를 쓴다**(§3).
-15. **`align=JUSTIFY` + `breakLatinWord="KEEP_WORD"` → 영문 근처 자간이 벌어짐.** 긴 영문 토큰을 줄 끝에서 못 쪼개니 양쪽정렬이 단어 사이 공백을 늘린다. 한글 본문에 영문 용어·서지가 섞이면 눈에 띄게 들쭉날쭉해진다(§4-서식 감사).
+15. **`align=JUSTIFY` + `breakLatinWord="KEEP_WORD"` → 영문 근처 자간이 벌어짐.** 긴 영문 토큰을 줄 끝에서 못 쪼개니 양쪽정렬이 단어 사이 공백을 늘린다. 한글 본문에 영문 용어·서지가 섞이면 눈에 띄게 들쭉날쭉해진다. **표 셀에서는 더 심해서** 줄바꿈된 셀이 `N o n - H i s p a n i c` 처럼 글자 단위로 벌어진다 — 셀 문단만 LEFT로 돌리면 없어진다(§4-서식 감사).
+16. **셀 텍스트를 문단 구분 없이 이어붙임 → 없는 오타를 만든다.** 한 셀의 여러 `hp:p`는 **줄바꿈**이다. 그냥 join하면 `US adults,` + `n=43` 이 `US adults,n=43` 이 되어 "띄어쓰기 오류"로 보인다(실제 감사에서 오탐 4건, 고칠 뻔했다). **`hwpxlib.cell_text()`/`table_grid()`의 `para_sep`을 쓸 것**(§1).
+17. **표 값 서식을 바꾸고 렌더를 안 봄 → 숫자가 두 줄로 쪼개짐.** `4701`→`4,701` 한 글자가 열 폭을 넘겨 `4,70`/`1`로 줄바꿈된다. **XML 검사도 셀↔소스 대조도 전부 통과하고 렌더에서만 보인다.** `hwpxlib.set_column_width()`로 다른 열에서 폭을 옮기고 **`audit_layout.py`로 확인**(§4·§7).
+18. **표 각주 길이를 바꾼 뒤 페이지를 안 봄 → 고아 페이지.** 각주가 혼자 다음 장으로 넘어가 거의 빈 페이지가 된다. 각주를 늘리거나 줄였으면 재렌더해 희박 페이지를 확인(§7).
 
 ---
 
@@ -105,6 +108,7 @@ def repack_preserve(src, changed, out, added=None):
   for ls in sec.findall(f'.//{P}linesegarray'): ls.getparent().remove(ls)
   ```
   삽입 단락이 주변과 **동일 charPr·paraPr**(특히 정렬 JUSTIFY)이면 한글 재조판 시 주변과 자간이 일치한다. linesegarray 없는 단락은 **한글에서 열어 저장(Ctrl+S)하기 전**엔 외부 미리보기에서 자간이 달라 보일 수 있다(저장하면 확정). 부차 원인: charPr의 script별 장평(`<hh:ratio>`)·자간(`<hh:spacing>`) 오매핑 → **새 charPr 만들지 말고 기존 재사용**.
+- **linesegarray 재출현 = 사람이 한글에서 열어 저장한 신호(역진단).** 네가 섹션 전체의 linesegarray를 0개로 지웠는데 다음에 파일을 열었을 때 다시 있으면(예: 562개), 그 사이 **사람이 한글에서 열어 저장(=재조판)**한 것이다. 사용자가 "내가 고친 걸 base로"라고 하면 네 in-memory/직전 저장 상태를 믿지 말고 **디스크 파일을 다시 읽어** 그 위에 쌓아라. mtime·미주 개수 변화도 함께 확인(사람이 텍스트만 고쳤는지, 구조까지 바꿨는지 구분).
 - **id 중복 제거**: 요소를 deepcopy하면 원본 id를 물려받는다. 클론 후 새 id 발급 + 검증.
   ```python
   def make_uid(root):
@@ -135,6 +139,8 @@ def repack_preserve(src, changed, out, added=None):
 - 헤더 음영은 `borderFillIDRef` 분리(예 헤더 25, 본문 3). 긴 셀은 paraPr JUSTIFY+vertAlign TOP.
 - **병합**: 세로(rowSpan)=시작 tc `cellSpan rowSpan=N`, 이후 행은 **가려지는 col의 tc 생략** / 가로(colSpan)=시작 tc `colSpan` 키우고 **가려지는 tc 제거 + 너비 합산**.
 - 캡션(표/그림): **텍스트 편집**=`<hp:caption>` 안 마지막 `<hp:t>` 교체. **신규 생성**=`<hp:outMargin>` **직후**에 `<hp:caption side gap width lastWidth fullSz="0">` 삽입(ShapeObject 순서 `sz·pos·outMargin·caption·…` — 표는 caption 뒤 `inMargin·tr`, 그림은 caption 뒤 `shapeComment`). 본문은 **실제 셀 `subList` 복제** → 안의 `<hp:p>` run에 `<hp:t>` 세팅 후 `linesegarray` 제거. **위치**=`side` `TOP/BOTTOM/LEFT/RIGHT`(LEFT/RIGHT는 `width`가 캡션 열폭). **정렬**=캡션 `<hp:p>`의 `paraPrIDRef`(원하는 정렬의 기존 paraPr 재사용; 없으면 새 paraPr 추가 + `itemCnt` 갱신). `autoNum`은 한글 자동 번호. 표 각주는 표 밖 별도 단락(작은 charPr).
+- **추출 섹션 vs 병합본 — 문서 전역 번호(표·그림 캡션 `autoNum`, 미주)는 병합본에서만 해결된다.** 큰 병합 문서에서 한 장(章=한 section)만 떼어내 편집하면, 캡션 `autoNum`은 "이게 전체에서 78번째 표"임을 알 수 없어 단독 파일에선 비거나 다른 번호로 보인다 → **캡션 번호를 손으로 채우지 말 것**(autoNum과 겹쳐 이중 표기). 다시 병합하면 자동으로 맞춰진다. **본문 평문 참조**("<표 78>는", "(그림 18)")는 autoNum이 아니라 고정 텍스트라 자동 갱신 안 됨 → 정석은 병합본에서 **교차참조(cross-ref)**, 정 안 되면 **확정 번호를 수동 기입**을 기본으로. 편집 전 `find`로 본문 참조를 전수 조사해 개수를 먼저 세라(신부전: 전체에 `<표 78>`·`(그림 18)` 딱 2개, 나머지 `<표 >`는 전부 캡션이었다).
+- **표 폭을 일괄 통일하지 마라 — 기존 폭 변이는 대개 의도(설계)다.** 셀 너비 합=표 `sz.width`는 *기술적* 제약이지, "모든 표를 본문 단 전체폭으로"가 아니다. 한 보고서 안에 현황표(넓게)와 정의성/소표(의도적으로 좁게)가 공존하며, **들여쓰기(문단 좌여백) 안에 놓인 표는 단 전체폭이 아니라 그만큼 좁아야** 한다. 폭이 44000 vs 31372로 갈려 있으면 "불일치"라 단정 말고 **의도인지 먼저 의심**하라. 시각적 폭 조정은 XML 일괄보다 **한글에서 표별 수동**이 정답(안질환 2026-07-24: 12표를 48190으로 밀었다가 청구정의표까지 늘려 사용자가 표별로 되돌림). 리사이즈가 정말 필요하면 각 행 셀을 비례 재계산 후 행합을 검증(그건 유효했음).
 
 **열 수 바꾸는 신규 표(2열→5×5 완전 예제)** — 담는 단락째 clone → tbl 초기화 → 헤더/본문 셀 템플릿 재조립:
 ```python
@@ -200,7 +206,9 @@ for row,vals in enumerate(all_rows):
 
 **미주·각주(endNote/footNote)**: **`<hp:ctrl>` 래핑 필수.** 한 run 안에서 **`[t 앞][ctrl>endNote][t 뒤]`로 인라인 삽입**(기존 미주 run을 clone하면 구조 보장). 번호는 한글이 위치 기준 자동 재계산 → 순서대로 삽입. 각주는 `endNote`→`footNote`, autoNum `numType`을 `ENDNOTE`→`FOOTNOTE`로만 변경. **클론 함정**: `endNote`의 `instId`뿐 아니라 내부 `subList>p`의 **id도 새로 부여**(안 하면 중복 → 불안정). 본문 추출은 `own()`으로 제외(§1).
 
-**메모(MEMO)**: 검토 주석이 `fieldBegin type="MEMO" > subList`에 저장됨 → 본문 추출 시 `own()`으로 제외. `fieldBegin`/`fieldEnd`는 `beginIDRef`로 페어링(다른 단락에 걸칠 수 있음), 제거 시 **양쪽 `<hp:ctrl>` 모두 제거**(걸린 본문 `<hp:t>`는 유지).
+**메모(MEMO)**: 검토 주석이 `fieldBegin type="MEMO" > subList`에 저장됨(⚠️ `<hp:memo>`가 **아니다** — `.//hp:memo`로 찾으면 0개인 흔한 오진). `parameters`에 Author·CreateDateTime, `subList`에 메모 텍스트. `fieldBegin`/`fieldEnd`는 `beginIDRef`로 페어링(다른 단락에 걸칠 수 있음), 제거 시 **양쪽 `<hp:ctrl>` 모두 제거**(걸린 본문 `<hp:t>`는 유지). 본문 추출 시 `own()`으로 제외. → **`hwpxlib.read_memos(sec)`**(id·author·date·text) / **`hwpxlib.delete_memo(sec, memo_id=None)`**(한글 '메모 삭제'와 동일 결과 검증됨). 검토자가 accept한 제안은 tracking·메모 모두 삭제, reject는 메모로 남긴다는 관행에 유의.
+
+**변경추적(track change, reviewer 수정)**: 삽입=`<hp:insertBegin Id TcId/>…텍스트…<hp:insertEnd .../>`, 삭제=`<hp:deleteBegin/>…<hp:deleteEnd/>`(빈 마커=문단분리/서식만). 작성자·시각·종류는 **`header.xml`의 `<hp:trackChanges itemCnt><hp:trackChange type="Insert/Delete/CharShape" date author…/>`**. 읽기: **`hwpxlib.read_track_changes(sec)`** → `{"insert":[…],"delete":[…]}`. ⚠️ **수용/거부는 XML로 하지 말 것**(마커+삭제내용 정확 제거가 까다로워 손상 위험) — **한글 COM**으로: `hwp.HAction.Run("TrackChangeApplyAll")`(수용) / `"TrackChangeCancelAll"`(거부). ★ **반환값이 False여도 실제 적용됨** → `insertBegin`/`deleteBegin` 카운트 0으로 검증. COM은 **전 문서 적용**이라 특정 장만 처리하려면 사본에서. (pyhwpx에 `TrackChange*` 메서드군; `IsTrackChange`=추적모드 on/off.)
 
 **스코핑·오타 감사**: 텍스트 매치 편집은 동일 문구가 다른 절에도 있으니 **섹션 범위로 한정**. 띄어쓰기 일괄 정규식(`[가-힣][0-9]` 등) 금지 — 셀·단락 단위 스캔 + 조사(은/는/이/가…)/코드(J코드·N17·IgA신증·KDIGO 등) 화이트리스트로 거짓양성 차단. 실제 오류(어미·단어가 숫자·영문에 직접 붙음, 예 `호소13건`)는 **구체 치환 dict**로 `el.text`·`el.tail` 적용 후 **각 키 적용수>0** 확인. **참고문헌/미주 일관성**(같은 문헌의 대소문자·doi 표기 통일). **항·장 재번호 시 `절N`·`표N`·`그림N` 상호참조가 stale** → 점검하거나 명칭 기반으로 견고화.
 

@@ -65,21 +65,43 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
    `content.hpf`, zero duplicate ids, zip integrity + mimetype first/STORED). It
    also prints a **minimal-change diff** so you can confirm *only intended changes*
    are present.
-6. **Round-trip in 한글.** LibreOffice can't render HWPX, so render-dependent
+6. **Render, then look** — `python scripts/audit_layout.py FILE.hwpx`. Steps 1–5 all
+   pass on defects that only a render shows: a number broken across two lines
+   because its column got one character wider, a table footnote stranded alone on
+   the next page, a table-of-contents number that no longer matches. **Any change to
+   a table's values, widths, or footnote length needs this step** — the earlier
+   checks cannot see layout.
+7. **Round-trip in 한글.** LibreOffice can't render HWPX, so render-dependent
    judgments (which heading orphans, whether spacing looks right) need the user to
    open the file in 한글 and, for equations/TOC, run 도구→차례 새로 고침 or
    double-click→close to finalize. Say so.
+
+### 표를 다시 채울 때 (재분석 후 원고 표 갱신)
+
+문서에 붙여넣은 표는 **붙여넣은 순간의 분석 결과에 얼어붙는다.** 재분석을 하면 본문은
+사람이 고쳐 쓰지만 표는 따라오지 않아, 표와 본문이 서로 다른 분석을 담은 채 공존한다.
+값을 손으로 옮기지 말고 소스에서 채운다:
+
+```python
+rows = [r[1:] for r in csv.reader(open(SRC, encoding="utf-8"))][1:]
+hwpxlib.fill_table(tbl, rows, row_offset=3, col_offset=1)   # 헤더 3행 · 라벨 열 보존
+```
+
+그러면 (a) 재실행 한 번이 전수 갱신이고, (b) `table_grid()` 로 다시 읽어 같은 소스와
+비교하는 것이 그대로 검증기가 된다. 열을 지우거나 넓혀야 하면 `delete_column` /
+`set_column_width` 를 쓴다 — 폭 합계를 손으로 맞추면 한글이 파일을 거부한다.
 
 ## Scripts (`scripts/`) — run these, don't reinvent
 
 | Script | Purpose |
 |---|---|
-| `hwpxlib.py` | Library: `repack_preserve`, `pick_template`/`clone_para`/`run_patterns` (문단 복제 — 직접 하지 말 것), `own` (real body text, excludes 각주·미주·메모 / footnote·endnote·memo), `make_uid`, `strip_linesegarray`, `find_duplicate_ids`, `structural_counts`, `replace_image` (swap a picture + update every geometry field incl. the easy-to-forget `imgDim`), plus §7 verify helpers. Import it. |
+| `hwpxlib.py` | Library: `repack_preserve`, `pick_template`/`clone_para`/`run_patterns` (문단 복제 — 직접 하지 말 것), `own` (real body text, excludes 각주·미주·메모 / footnote·endnote·memo), `replace_text`/`insert_ctrls_after`/`find_para` (**`.tail`-safe** 본문 편집 — run 텍스트는 `<hp:t>.text` **및** 인라인 자식(`lineBreak`…)의 `.tail`에 나뉘어 있어 `t.text`만 보면 `lineBreak` 뒤 글자를 통째로 놓침; 손으로 짜지 말 것), **표 편집** `table_grid`/`cell_text` (셀 안 문단 = 줄바꿈이므로 **구분자 보존** 추출), `set_cell_text`, `fill_table` (소스 데이터 → 표 본문), `delete_row`/`delete_column`/`set_column_width`/`table_width_ok` (폭 합계·rowAddr 자동 보존), `find_pic` (문단 위치 말고 BinData id로 그림 찾기), `read_memos`/`delete_memo` (검토 메모 = `fieldBegin type="MEMO"`, NOT `hp:memo`), `read_track_changes` (변경추적 읽기; accept/reject는 한글 COM `TrackChangeApplyAll`/`CancelAll`), `make_uid`, `strip_linesegarray`, `find_duplicate_ids`, `structural_counts`, `replace_image` (swap a picture + update every geometry field incl. the easy-to-forget `imgDim`), plus §7 verify helpers. Import it. |
 | `inspect_hwpx.py FILE [--text] [--breaks]` | Structure dump; find hidden page/column breaks. |
 | `verify.py EDITED [--orig ORIG]` | Run the full §7 checklist; non-zero exit on failure (CI-gateable). |
 | `selftest.py` | Prove the repacker is lossless without a real file. |
 | `tables_to_xlsx.py FILE [OUT]` | Export tables to Excel (.xlsx), merged cells preserved (needs `openpyxl`). Cells with only an image/equation → `[그림]`/`[수식]`; legacy `.hwp` is refused with guidance. |
 | `audit_typography.py FILE [--expect-face 이름] [--expect-body-pt N]` | 서식 일관성 감사: 실제 쓰이는 charPr을 사용횟수·크기·글꼴로 집계. **글꼴 혼재**와 **JUSTIFY+KEEP_WORD 영문 문단**(자간 벌어짐)을 잡는다. `--expect-*`를 주면 어긋날 때 종료코드 1. |
+| `audit_layout.py FILE [--pdf RENDER.pdf]` | **렌더 기반** 감사 — 구조검사가 통과하는 결함만 노린다: 셀 내용이 열 폭을 넘겨 **숫자가 두 줄로 쪼개진 것**(`4,70`/`1`), 표 각주가 혼자 넘어간 **희박 페이지**, **목차 페이지 번호 ↔ 실제 페이지** 불일치, 표 폭 합계. `--pdf` 없으면 한글 COM으로 직접 렌더. |
 | `hwpx_to_markdown.py FILE [OUT.md]` | Extract the document's text + tables as Markdown (for an LLM to read/summarize; no OUT → stdout). |
 | `hwpx_to_docx.py FILE [OUT.docx]` | Export to Word (.docx), tables + merged cells preserved (needs `python-docx`; for journals / non-한글 co-authors). |
 | `data_to_hwpx_table.py DATA.(xlsx\|csv) TARGET.hwpx [OUT] [--sheet]` | Insert an Excel/CSV table into a 한글 doc, merged cells preserved (needs `openpyxl` for xlsx; TARGET must contain a table for cell styling; CSV encoding auto). |
