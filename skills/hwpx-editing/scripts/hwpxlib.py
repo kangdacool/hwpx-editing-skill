@@ -304,6 +304,220 @@ def find_para(root_or_paras, contains=None, starts=None):
 
 
 # ---------------------------------------------------------------------------
+# §4-T. Tables — read and edit cells without hand-rolling the XML
+# ---------------------------------------------------------------------------
+def table_rows(tbl):
+    """The table's <hp:tr> elements, in order."""
+    return tbl.findall(f"{P}tr")
+
+
+def table_cells(tr):
+    """A row's <hp:tc> elements, in order (merged cells appear once, at their
+    top-left position, so a row's cell count can be smaller than colCnt)."""
+    return tr.findall(f"{P}tc")
+
+
+def cell_text(tc, para_sep="\n"):
+    """Plain text of one cell.
+
+    ``para_sep`` matters: a cell can hold several <hp:p>, which render as
+    separate LINES. Joining them with "" invents typos — `US adults,` + `n=43`
+    reads as ``US adults,n=43`` and looks like a missing space that is not there.
+    Keep the separator unless you truly want the glued form.
+    """
+    sub = tc.find(f"{P}subList")
+    if sub is None:
+        return ""
+    return para_sep.join(
+        "".join("".join(t.itertext()) for t in cp.findall(f".//{P}t"))
+        for cp in sub.findall(f"{P}p"))
+
+
+def table_grid(tbl, para_sep="\n"):
+    """The whole table as a list of rows of cell strings (see `cell_text`)."""
+    return [[cell_text(tc, para_sep) for tc in table_cells(tr)] for tr in table_rows(tbl)]
+
+
+def set_cell_text(tc, text, keep_runs=False):
+    """Replace a cell's content with a single line of `text`.
+
+    Keeps the first paragraph's paraPr and the first run's charPr, drops the
+    extra paragraphs/runs, and strips the stale linesegarray. Pass
+    ``keep_runs=True`` when the cell's later runs carry formatting you need
+    (e.g. a superscript marker) and you only want the first run's text changed.
+    """
+    sub = tc.find(f"{P}subList")
+    ps = sub.findall(f"{P}p")
+    for extra in ps[1:]:
+        sub.remove(extra)
+    p = ps[0]
+    runs = p.findall(f"{P}run")
+    if not runs:
+        raise ValueError("cell paragraph has no run to inherit formatting from")
+    if not keep_runs:
+        for extra in runs[1:]:
+            p.remove(extra)
+    run = runs[0]
+    for ch in list(run):
+        run.remove(ch)
+    etree.SubElement(run, f"{P}t").text = text
+    strip_linesegarray(p)
+    return tc
+
+
+def fill_table(tbl, rows, row_offset=0, col_offset=0, cols=None):
+    """Write `rows` (list of lists of str) into the table body.
+
+    This is the helper that makes "numbers are generated, never re-typed" cheap:
+    read the authoritative CSV, hand the values here, and a re-analysis becomes
+    one re-run instead of a hand-transcription pass. Reading the table back with
+    `table_grid` and diffing against the same source is then your verifier.
+
+    `cols` optionally maps source position -> cell index within the row, for
+    tables whose first column is a label you do not want to overwrite.
+    Raises if a row has fewer cells than the write needs (a silent short write
+    is how a stale value survives).
+    """
+    trs = table_rows(tbl)
+    n = 0
+    for r, values in enumerate(rows):
+        tr = trs[row_offset + r]
+        tcs = table_cells(tr)
+        for i, v in enumerate(values):
+            j = cols[i] if cols else col_offset + i
+            if j >= len(tcs):
+                raise IndexError("row %d has %d cells; cannot write index %d"
+                                 % (row_offset + r, len(tcs), j))
+            set_cell_text(tcs[j], v)
+            n += 1
+    return n
+
+
+def table_width_ok(tbl):
+    """(ok, table_width, per-row widths) — every row's cell widths must sum to
+    the table width or 한글 rejects the file. Check this after ANY geometry edit.
+
+    Rows under a vertical merge carry no <hp:tc> for the covered columns, so
+    their own widths sum short; the carried width is added back here. Forgetting
+    that turns every header with a rowSpan into a false alarm.
+    """
+    sz = tbl.find(f"{P}sz")
+    total = int(sz.get("width"))
+    sums = []
+    pending = {}                       # colAddr -> [rows still covered, width]
+    for tr in table_rows(tbl):
+        carried = sum(w for _rows, w in pending.values())
+        own = sum(int(tc.find(f"{P}cellSz").get("width")) for tc in table_cells(tr))
+        sums.append(own + carried)
+        for addr in list(pending):
+            pending[addr][0] -= 1
+            if pending[addr][0] <= 0:
+                del pending[addr]
+        for tc in table_cells(tr):
+            span = int(tc.find(f"{P}cellSpan").get("rowSpan"))
+            if span > 1:
+                pending[int(tc.find(f"{P}cellAddr").get("colAddr"))] = \
+                    [span - 1, int(tc.find(f"{P}cellSz").get("width"))]
+    return all(s == total for s in sums), total, sums
+
+
+def set_column_width(tbl, col_addr, delta, take_from=()):
+    """Widen (or narrow) one column by `delta` HWPUNIT, taking it back from the
+    columns in `take_from` so the row total is preserved.
+
+    Needed more often than it looks: making a cell's text longer (e.g. 4701 ->
+    4,701) can push it past the column width, and 한글 then WRAPS it — "4,70"
+    on one line and "1" on the next. No structural check sees that; only a
+    render does. `delta` is split evenly across `take_from`.
+    """
+    if take_from and delta % len(take_from):
+        raise ValueError("delta must divide evenly across take_from columns")
+    share = delta // len(take_from) if take_from else 0
+    for tr in table_rows(tbl):
+        for tc in table_cells(tr):
+            addr = int(tc.find(f"{P}cellAddr").get("colAddr"))
+            w = tc.find(f"{P}cellSz")
+            if addr == col_addr:
+                w.set("width", str(int(w.get("width")) + delta))
+            elif addr in take_from:
+                w.set("width", str(int(w.get("width")) - share))
+    return table_width_ok(tbl)
+
+
+def delete_row(tbl, row_idx):
+    """Remove a row and renumber the rowAddr of every row below it.
+
+    Also shrinks the cached table height by the removed row's height, so 한글
+    does not lay out against a stale total.
+    """
+    trs = table_rows(tbl)
+    dead = trs[row_idx]
+    height = int(table_cells(dead)[0].find(f"{P}cellSz").get("height"))
+    tbl.remove(dead)
+    for tr in table_rows(tbl):
+        for tc in table_cells(tr):
+            ca = tc.find(f"{P}cellAddr")
+            ra = int(ca.get("rowAddr"))
+            if ra > row_idx:
+                ca.set("rowAddr", str(ra - 1))
+    tbl.set("rowCnt", str(len(table_rows(tbl))))
+    sz = tbl.find(f"{P}sz")
+    sz.set("height", str(int(sz.get("height")) - height))
+    return len(table_rows(tbl))
+
+
+def delete_column(tbl, col_addr, give_width_to=0):
+    """Remove one column: drop its <hp:tc> from every row, shift the colAddr of
+    the columns to its right, shrink colCnt, and hand the freed width to the
+    column at `give_width_to` so each row still sums to the table width.
+
+    Full-width merged rows (title/footnote) are not deleted — their colSpan is
+    decremented instead.
+    """
+    col_cnt = int(tbl.get("colCnt"))
+    freed = None
+    for tr in table_rows(tbl):
+        tcs = table_cells(tr)
+        first = tcs[0]
+        span = first.find(f"{P}cellSpan")
+        if int(span.get("colSpan")) >= col_cnt:          # merged across the table
+            span.set("colSpan", str(col_cnt - 1))
+            continue
+        for tc in tcs:
+            if int(tc.find(f"{P}cellAddr").get("colAddr")) == col_addr:
+                freed = int(tc.find(f"{P}cellSz").get("width"))
+                tr.remove(tc)
+                break
+        for tc in table_cells(tr):
+            ca = tc.find(f"{P}cellAddr")
+            a = int(ca.get("colAddr"))
+            if a > col_addr:
+                ca.set("colAddr", str(a - 1))
+    if freed is None:
+        raise ValueError("column %d not found" % col_addr)
+    for tr in table_rows(tbl):
+        tcs = table_cells(tr)
+        first = tcs[0]
+        if int(first.find(f"{P}cellSpan").get("colSpan")) >= col_cnt - 1:
+            continue
+        w = tcs[give_width_to].find(f"{P}cellSz")
+        w.set("width", str(int(w.get("width")) + freed))
+    tbl.set("colCnt", str(col_cnt - 1))
+    return table_width_ok(tbl)
+
+
+def find_pic(root, binary_item_id_ref):
+    """The <hp:pic> whose <hc:img> points at `binary_item_id_ref` (e.g. "image3").
+    Addressing pictures by BinData id survives paragraph reordering; addressing
+    them by paragraph index does not."""
+    for pic in root.iter(f"{P}pic"):
+        img = pic.find(f".//{C}img")
+        if img is not None and img.get("binaryItemIDRef") == binary_item_id_ref:
+            return pic
+    return None
+
+
+# ---------------------------------------------------------------------------
 # §3. Common edit rules (linesegarray · ids)
 # ---------------------------------------------------------------------------
 def strip_linesegarray(el) -> int:

@@ -107,6 +107,20 @@ def main() -> int:
     hard_ok &= _p(not ir_bad, "3b. IDRef/itemCnt integrity (charPr/paraPr/borderFill/style)",
                   "" if not ir_bad else "; ".join(ir_bad[:6]))
 
+    # 3c. Table geometry: every row's cell widths must sum to the table width
+    #     (한글 rejects a table whose columns do not add up). Any column
+    #     insert/delete/resize can break this, and nothing else here catches it.
+    width_bad = []
+    for name in H.section_names(z):
+        root = H.etree.fromstring(z.read(name))
+        for n, tbl in enumerate(root.iter(f"{H.P}tbl")):
+            ok, total, sums = H.table_width_ok(tbl)
+            if not ok:
+                off = {i: s for i, s in enumerate(sums) if s != total}
+                width_bad.append(f"{name} tbl#{n} width={total} rows={dict(list(off.items())[:3])}")
+    hard_ok &= _p(not width_bad, "3c. table cell widths sum to table width",
+                  "" if not width_bad else "; ".join(width_bad[:4]))
+
     # 5. zip integrity (report before 4/6 which are informational)
     zi = H.zip_integrity(z)
     hard_ok &= _p(zi["testzip_ok"], "5a. zip testzip() ok")
