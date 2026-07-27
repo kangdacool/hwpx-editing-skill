@@ -76,6 +76,7 @@ skills/hwpx-editing/
     ├── hwpxlib.py           # 검증된 핵심 함수 (재압축 / 파싱 / 검증)
     ├── inspect_hwpx.py      # 구조 덤프 · 숨은 페이지/단 나눔 탐지
     ├── verify.py            # §7 빌드 체크리스트 실행 (CI 게이트 가능)
+    ├── audit_layout.py      # 렌더 기반 감사 — 셀 줄바꿈·고아 페이지·목차 페이지번호
     └── selftest.py          # 실제 파일 없이 재압축 무손실성 증명
 ```
 
@@ -151,6 +152,7 @@ Windows(PowerShell): `./install.ps1 claude` (하위 명령 동일).
 ```bash
 python skills/hwpx-editing/scripts/inspect_hwpx.py 내문서.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py 편집본.hwpx --orig 원본.hwpx
+python skills/hwpx-editing/scripts/audit_layout.py 편집본.hwpx   # 렌더해서 레이아웃 결함 확인
 python skills/hwpx-editing/scripts/selftest.py     # 파일 없이 동작 점검
 python skills/hwpx-editing/scripts/tables_to_xlsx.py 내문서.hwpx   # 표 전부 엑셀로(병합 보존)
 python skills/hwpx-editing/scripts/hwpx_to_markdown.py 내문서.hwpx  # 본문·표를 마크다운으로(LLM 요약용)
@@ -220,6 +222,7 @@ skills/hwpx-editing/
     ├── hwpxlib.py           # verified primitives (repack / parse / verify)
     ├── inspect_hwpx.py      # dump structure; find hidden page/column breaks
     ├── verify.py            # run the §7 build checklist (CI-gateable)
+    ├── audit_layout.py      # audit the RENDER — wrapped cells, orphan pages, TOC numbers
     └── selftest.py          # prove the repacker is lossless — no real file needed
 ```
 
@@ -294,6 +297,7 @@ You can also run the tools directly:
 ```bash
 python skills/hwpx-editing/scripts/inspect_hwpx.py mydoc.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py edited.hwpx --orig original.hwpx
+python skills/hwpx-editing/scripts/audit_layout.py edited.hwpx   # render, then check the layout
 python skills/hwpx-editing/scripts/selftest.py     # sanity check, no file needed
 python skills/hwpx-editing/scripts/tables_to_xlsx.py mydoc.hwpx   # tables → Excel (merges preserved)
 python skills/hwpx-editing/scripts/hwpx_to_markdown.py mydoc.hwpx  # extract text/tables as Markdown
