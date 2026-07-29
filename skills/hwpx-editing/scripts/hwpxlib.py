@@ -95,7 +95,8 @@ def _parse_central(raw: bytes):
     return recs, order
 
 
-def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None) -> None:
+def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None,
+                    drop=None, rename: dict | None = None) -> None:
     """Rebuild an HWPX, byte-copying every unchanged entry and re-deflating only
     what changed.
 
@@ -106,6 +107,15 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
         out:     output .hwpx path
         added:   {entry_name: bytes} for brand-new entries (e.g. BinData images,
                  new sectionN.xml), which are DEFLATED.
+        drop:    iterable of entry names to leave out entirely.
+        rename:  {old_entry_name: new_entry_name}. Renamed entries are re-deflated
+                 (the name lives in both the local and central headers).
+
+    `drop` + `rename` exist for **pulling one 장/구역 out of a merged report** —
+    keep `Contents/sectionN.xml`, rename it to `section0.xml`, drop the other
+    sections and the BinData they own. You must also rewrite `Contents/content.hpf`
+    (manifest + spine) and `META-INF/container.rdf`, which enumerate the entries —
+    see `extract_section()`.
 
     Why this exists: 한글 rejects files whose unchanged entries were re-deflated.
     Copying their local records verbatim (flag bits and all) means a no-op repack
@@ -119,11 +129,24 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
     raw = open(src, "rb").read()
     recs, order = _parse_central(raw)
     obuf, meta = io.BytesIO(), {}
+    drop = set(drop or ())
+    rename = dict(rename or {})
+    changed = dict(changed)
+    order = [n for n in order if n not in drop]
+    if rename:
+        # A rename rewrites the entry name in both headers, so the entry can no
+        # longer be byte-copied. Re-deflate it with its original bytes unless the
+        # caller already supplied new content for it.
+        with zipfile.ZipFile(src) as _z:
+            for n in rename:
+                if n in order and n not in changed:
+                    changed[n] = _z.read(n)
+    out_names = [rename.get(n, n) for n in order]
 
     for name in order:
         rc = recs[name]
         loff = obuf.tell()
-        fnb = name.encode("utf-8")
+        fnb = rename.get(name, name).encode("utf-8")
         if name in changed:
             data = changed[name]
             if rc["method"] == 8:
@@ -135,8 +158,8 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
             obuf.write(struct.pack("<IHHHHHIIIHH", 0x04034B50, rc["vn"], 0,
                                    rc["method"], rc["mt"], rc["md"], crc,
                                    len(comp), len(data), len(fnb), 0) + fnb + comp)
-            meta[name] = dict(rc, flag=0, crc=crc, csize=len(comp),
-                              usize=len(data), loff=loff, extra=b"")
+            meta[rename.get(name, name)] = dict(rc, flag=0, crc=crc, csize=len(comp),
+                                                usize=len(data), loff=loff, extra=b"")
         else:  # byte-for-byte raw copy of the local entry
             if rc["flag"] & 0x08:
                 # flag bit 3 = data descriptor: the local header's csize/crc are
@@ -168,10 +191,10 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
             meta[name] = dict(vmb=20, vn=20, flag=0, method=8, mt=0, md=0, crc=crc,
                               csize=len(comp), usize=len(data), loff=loff,
                               extra=b"", comment=b"", iattr=0, eattr=0)
-            order.append(name)
+            out_names.append(name)
 
     cd = obuf.tell()
-    for name in order:
+    for name in out_names:
         m = meta[name]
         fnb = name.encode("utf-8")
         obuf.write(struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, m["vmb"], m["vn"],
@@ -179,7 +202,7 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
                                m["csize"], m["usize"], len(fnb), len(m["extra"]),
                                len(m["comment"]), 0, m["iattr"], m["eattr"],
                                m["loff"]) + fnb + m["extra"] + m["comment"])
-    n = len(order)
+    n = len(out_names)
     obuf.write(struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, n, n,
                            obuf.tell() - cd, cd, 0))
     open(out, "wb").write(obuf.getvalue())
@@ -188,6 +211,98 @@ def repack_preserve(src: str, changed: dict, out: str, added: dict | None = None
 # ---------------------------------------------------------------------------
 # §1. Structure & parsing
 # ---------------------------------------------------------------------------
+def extract_section(src: str, keep: str, out: str, title: str | None = None) -> dict:
+    """Pull ONE 구역/장 out of a merged HWPX into a standalone, openable document.
+
+    `keep` = the entry to keep (e.g. "Contents/section8.xml"); it becomes
+    `Contents/section0.xml` in `out`. Everything the kept section doesn't reference
+    is dropped: the other sections, their BinData, and the stale preview image.
+    `header.xml` is kept whole — its charPr/paraPr/style/fontface ids are what the
+    section refers to, and pruning them would break every IDRef.
+
+    Rewrites the two files that enumerate package entries — `Contents/content.hpf`
+    (manifest + spine, and `<opf:title>` if `title` is given) and
+    `META-INF/container.rdf`. Forgetting either makes 한글 refuse the file.
+
+    Returns {"binaries": [...], "dropped": n} for logging.
+
+    ⚠️ Document-wide autoNum (표·그림 캡션 번호) restarts at 1 in the extracted file,
+    because "이게 전체에서 78번째 표"는 병합본만 안다. That is expected and correct —
+    the numbers come back when the 취합 담당자 merges it. **번호를 손으로 채우지 말 것**
+    (autoNum과 겹쳐 이중 표기가 된다). 미주는 구역별로 매겨지므로 그대로 살아남는다.
+    """
+    with zipfile.ZipFile(src) as z:
+        names = z.namelist()
+        if keep not in names:
+            raise ValueError(f"{keep!r} not in {src}")
+        sec = etree.fromstring(z.read(keep))
+        hpf = z.read("Contents/content.hpf").decode("utf-8")
+        rdf = z.read("META-INF/container.rdf").decode("utf-8")
+        hdr_raw = z.read("Contents/header.xml")
+        set_raw = z.read("settings.xml") if "settings.xml" in names else None
+
+    # The binaryItemIDRef → file mapping lives in content.hpf's manifest, NOT in
+    # header.xml (header has no <hh:binaryItem> in files 한글 writes today).
+    item_re = re.compile(r'<opf:item id="([^"]+)" href="([^"]+)"[^>]*/>')
+    manifest = {m.group(1): m.group(0) for m in item_re.finditer(hpf)}
+    hrefs = {m.group(1): m.group(2) for m in item_re.finditer(hpf)}
+    refs = {e.get("binaryItemIDRef") for e in sec.iter()
+            if e.get("binaryItemIDRef")}
+    keep_bin = {hrefs[r] for r in refs if r in hrefs}
+    unresolved = sorted(r for r in refs if r not in hrefs)
+    if unresolved:
+        raise ValueError(f"binaryItemIDRef not in content.hpf manifest: {unresolved}")
+
+    drop = {n for n in names
+            if (n.startswith("Contents/section") and n != keep)
+            or (n.startswith("BinData/") and n not in keep_bin)
+            or n == "Preview/PrvImage.png"}
+
+    # content.hpf — manifest + spine list every entry; rebuild both. Reuse each kept
+    # BinData item's original line so its media-type survives verbatim.
+    items = ['<opf:item id="header" href="Contents/header.xml" media-type="application/xml"/>',
+             '<opf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/>']
+    items += [manifest[i] for i in sorted(refs) if hrefs.get(i) in keep_bin]
+    hpf = re.sub(r"<opf:manifest>.*?</opf:manifest>",
+                 "<opf:manifest>" + "".join(items) + "</opf:manifest>", hpf, flags=re.S)
+    hpf = re.sub(r"<opf:spine>.*?</opf:spine>",
+                 '<opf:spine><opf:itemref idref="header" linear="yes"/>'
+                 '<opf:itemref idref="section0" linear="yes"/></opf:spine>', hpf, flags=re.S)
+    if title:
+        hpf = re.sub(r"<opf:title>.*?</opf:title>",
+                     f"<opf:title>{title}</opf:title>", hpf, flags=re.S)
+
+    # container.rdf — drops one hasPart/Description pair per section.
+    rdf = re.sub(r'<rdf:Description rdf:about="">(?:(?!</rdf:Description>).)*?'
+                 r'rdf:resource="Contents/section(?!0\.xml")[^"]*"/></rdf:Description>'
+                 r'<rdf:Description rdf:about="Contents/section(?!0\.xml")[^"]*">'
+                 r'(?:(?!</rdf:Description>).)*?</rdf:Description>', "", rdf, flags=re.S)
+
+    # 🔴 header.xml declares how many 구역 the document has. Leave `secCnt` at the
+    #    merged file's value and 한글 opens the file, passes every structure check —
+    #    and renders ONE BLANK PAGE. Patch it in place (byte regex, so the rest of
+    #    the header is untouched).
+    hdr_new = re.sub(rb'(<hh:head[^>]*?secCnt=")\d+(")', rb'\g<1>1\g<2>',
+                     hdr_raw, count=1)
+    if hdr_new == hdr_raw:
+        raise ValueError("header.xml에 secCnt 속성이 없다 — 구조가 예상과 다르다")
+
+    changed = {"Contents/content.hpf": XML_DECL + hpf.split("?>", 1)[1].encode("utf-8"),
+               "META-INF/container.rdf": XML_DECL + rdf.split("?>", 1)[1].encode("utf-8"),
+               "Contents/header.xml": hdr_new}
+    if set_raw is not None:
+        # the saved caret points at a paragraph id that no longer exists
+        changed["settings.xml"] = re.sub(rb'paraIDRef="\d+" pos="\d+"',
+                                         b'paraIDRef="0" pos="0"', set_raw)
+    if "Preview/PrvText.txt" in names:
+        head = "\n".join(t for p in list(sec.iter(f"{P}p"))[:40]
+                         if (t := own(p).strip()))[:800]
+        changed["Preview/PrvText.txt"] = head.encode("utf-8")
+    repack_preserve(src, changed, out, drop=drop,
+                    rename={keep: "Contents/section0.xml"})
+    return {"binaries": sorted(keep_bin), "dropped": len(drop)}
+
+
 def section_names(z: zipfile.ZipFile) -> list[str]:
     """All Contents/sectionN.xml entries, in numeric order (0..N)."""
     names = [n for n in z.namelist()
@@ -286,6 +401,78 @@ def insert_ctrls_after(p, phrase, ctrls):
                 nt = etree.Element(f"{P}t"); nt.text = after; run.insert(k, nt)
             return True
     return False
+
+
+def nested_notes(root):
+    """Return [(note, [inner notes])] for every 각주/미주 that contains another one.
+
+    한글 cannot represent a 주석 inside a 주석 and errors when opening such a file,
+    but nothing else catches it: the XML is well-formed and the ids are unique.
+    It happens when you insert a SECOND note at the same anchor and the run handle
+    you append to still points inside the note you just built — `.//hp:run`,
+    `.//hp:p` and `.//hp:endNote` all descend into <hp:subList>.
+    Use add_endnotes() below instead of hand-rolling that loop; verify.py check 3d
+    gates on this. (Real case: 신부전 제7장 미주 36 → 260723·260727·260728 all carried it.)
+    """
+    out = []
+    for note in root.iter(f"{P}endNote", f"{P}footNote"):
+        inner = [x for x in note.iter(f"{P}endNote", f"{P}footNote") if x is not note]
+        if inner:
+            out.append((note, inner))
+    return out
+
+
+def clone_endnote(template_ctrl, text, uid):
+    """Clone an existing endnote/footnote <hp:ctrl> with fresh ids and new text.
+
+    `template_ctrl` is the <hp:ctrl> wrapping an <hp:endNote>/<hp:footNote> — grab one
+    from the document rather than building the XML by hand, so charPr/paraPr/autoNum
+    formatting matches. `uid` comes from make_uid(section_root).
+
+    Returns a detached <hp:ctrl> ready to hand to insert_ctrls_after()/add_endnotes().
+    Never append the result to a run you obtained from INSIDE another note.
+    """
+    ctrl = copy.deepcopy(template_ctrl)
+    for el in ctrl.iter():
+        for a in _ID_ATTRS:
+            if el.get(a) is not None:
+                el.set(a, str(uid()))
+    for ls in ctrl.findall(f".//{P}linesegarray"):
+        ls.getparent().remove(ls)
+    note = ctrl.find(f"{P}endNote")
+    if note is None:
+        note = ctrl.find(f"{P}footNote")
+    if note is None:
+        raise ValueError("template_ctrl does not wrap an endNote/footNote")
+    if nested_notes(ctrl):
+        raise ValueError("template_ctrl already contains a nested 주석 — "
+                         "pick a clean template (see nested_notes())")
+    ts = note.findall(f".//{P}t")
+    if not ts:
+        raise ValueError("template note has no <hp:t> to carry the citation")
+    ts[0].text = text
+    for t in ts[1:]:
+        t.text = ""
+    return ctrl
+
+
+def add_endnotes(p, phrase, template_ctrl, texts, uid):
+    """Attach one or more endnotes/footnotes to a BODY paragraph, right after `phrase`.
+
+    This is the safe path for the multi-note case. Each note is cloned from
+    `template_ctrl` with fresh ids, then all of them are inserted as siblings in the
+    host run via insert_ctrls_after() — which anchors only on real body text, so a
+    note can never land inside another note's <hp:subList>.
+
+    Raises if `p` is not a body paragraph (i.e. it sits inside a subList) or if
+    `phrase` isn't found in plain body text. Returns the list of inserted <hp:ctrl>.
+    """
+    if any(a.tag == f"{P}subList" for a in p.iterancestors()):
+        raise ValueError("target paragraph is inside a subList (주석/표 셀), not body text")
+    ctrls = [clone_endnote(template_ctrl, t, uid) for t in texts]
+    if not insert_ctrls_after(p, phrase, ctrls):
+        raise ValueError(f"anchor phrase not found in body text: {phrase!r}")
+    return ctrls
 
 
 def find_para(root_or_paras, contains=None, starts=None):

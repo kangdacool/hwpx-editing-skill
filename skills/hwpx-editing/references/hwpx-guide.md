@@ -24,6 +24,13 @@
 16. **셀 텍스트를 문단 구분 없이 이어붙임 → 없는 오타를 만든다.** 한 셀의 여러 `hp:p`는 **줄바꿈**이다. 그냥 join하면 `US adults,` + `n=43` 이 `US adults,n=43` 이 되어 "띄어쓰기 오류"로 보인다(실제 감사에서 오탐 4건, 고칠 뻔했다). **`hwpxlib.cell_text()`/`table_grid()`의 `para_sep`을 쓸 것**(§1).
 17. **표 값 서식을 바꾸고 렌더를 안 봄 → 숫자가 두 줄로 쪼개짐.** `4701`→`4,701` 한 글자가 열 폭을 넘겨 `4,70`/`1`로 줄바꿈된다. **XML 검사도 셀↔소스 대조도 전부 통과하고 렌더에서만 보인다.** `hwpxlib.set_column_width()`로 다른 열에서 폭을 옮기고 **`audit_layout.py`로 확인**(§4·§7).
 18. **표 각주 길이를 바꾼 뒤 페이지를 안 봄 → 고아 페이지.** 각주가 혼자 다음 장으로 넘어가 거의 빈 페이지가 된다. 각주를 늘리거나 줄였으면 재렌더해 희박 페이지를 확인(§7).
+19. **한 앵커에 미주를 둘 이상 달다가 방금 만든 미주 **안에** 다음 미주를 넣음 → 한글이 열 때 오류.** `.//hp:run`·`.//hp:p`·`.//hp:endNote`가 `subList`를 타고 들어가므로, 첫 미주를 만든 뒤 run 핸들이 그 미주 내부를 가리킨 채 남는다. **`hwpxlib.add_endnotes()`로 문단 수준 형제로만 삽입**하고, `verify.py` 3d(`nested_notes()`)로 게이트(§4-주석).
+20. **`<hp:tbl rowCnt>`를 실제 `<hp:tr>` 수와 안 맞춤 → 문서 전체가 한 쪽으로 무너짐.** 행을 추가·삭제했으면 `rowCnt`(및 `colCnt`)를 갱신한다(§4-표).
+21. **구역을 지우거나 떼어낸 뒤 `header.xml`의 `<hh:head secCnt>`를 안 고침 → 열리기는 하는데 빈 한 쪽만 나온다.** 병합본에서 한 장만 추출할 때 특히. `secCnt`는 실제 `sectionN.xml` 개수와 같아야 한다. `content.hpf`(manifest+spine)와 `META-INF/container.rdf`도 함께 고쳐야 한다 — **`hwpxlib.extract_section()`이 셋을 다 처리한다**(§6-E).
+
+22. **여러 장을 합치는 보고서인데 미주 배치가 `END_OF_DOCUMENT`.** 합치는 순간 그 장의 미주가 **보고서 맨 끝으로 몰리고 「참고문헌」 표제는 빈 채로 남는다.** 단독으로 열면 멀쩡해 보인다. `secPr/endNotePr`을 `ON_SECTION`·`END_OF_SECTION`으로(§6-E).
+
+> 19·20·21·22는 같은 부류다 — **XML은 well-formed, id 중복 없음, 하드체크 전부 PASS. 한글로 열어야만 드러난다.** 22는 한 술 더 떠서 **단독 렌더도 통과하고 합쳐야 드러난다.** 구조·표·주석·구역을 건드렸으면 렌더까지, 취합될 원고라면 **합쳐서** 렌더까지 가야 끝난 것이다(§7).
 
 ---
 
@@ -138,6 +145,16 @@ def repack_preserve(src, changed, out, added=None):
 - 셀 클론 시 **`cellSz.height`**=본문 282(헤더 0/282), **각 행 열폭 합 = 표 sz.width**(안 맞으면 거부).
 - 헤더 음영은 `borderFillIDRef` 분리(예 헤더 25, 본문 3). 긴 셀은 paraPr JUSTIFY+vertAlign TOP.
 - **병합**: 세로(rowSpan)=시작 tc `cellSpan rowSpan=N`, 이후 행은 **가려지는 col의 tc 생략** / 가로(colSpan)=시작 tc `colSpan` 키우고 **가려지는 tc 제거 + 너비 합산**.
+- **행을 더하거나 지웠으면 `tbl@rowCnt`(및 `colCnt`)를 실제 개수에 맞출 것.** 안 맞으면 한글이 표를 못 읽어 **문서 전체가 한 쪽으로 무너진다** — 구조검사는 전부 통과한다(흔한 실패 20).
+
+**표 다시 채우기 (재분석 후 원고 표 갱신)** — 문서에 붙여넣은 표는 **붙여넣은 순간의 분석 결과에 얼어붙는다.** 재분석하면 본문은 사람이 고쳐 쓰지만 표는 따라오지 않아, 표와 본문이 서로 다른 분석을 담은 채 공존한다. 값을 손으로 옮기지 말고 소스에서 채운다:
+
+```python
+rows = [r[1:] for r in csv.reader(open(SRC, encoding="utf-8"))][1:]
+hwpxlib.fill_table(tbl, rows, row_offset=3, col_offset=1)   # 헤더 3행 · 라벨 열 보존
+```
+
+그러면 (a) 재실행 한 번이 전수 갱신이고, (b) `table_grid()`로 다시 읽어 같은 소스와 비교하는 것이 그대로 검증기가 된다. 열을 지우거나 넓혀야 하면 `delete_column`/`set_column_width`를 쓴다 — 폭 합계를 손으로 맞추면 한글이 파일을 거부한다. 값·폭·각주 길이를 바꿨으면 **`audit_layout.py`로 렌더까지 확인**(흔한 실패 17·18).
 - 캡션(표/그림): **텍스트 편집**=`<hp:caption>` 안 마지막 `<hp:t>` 교체. **신규 생성**=`<hp:outMargin>` **직후**에 `<hp:caption side gap width lastWidth fullSz="0">` 삽입(ShapeObject 순서 `sz·pos·outMargin·caption·…` — 표는 caption 뒤 `inMargin·tr`, 그림은 caption 뒤 `shapeComment`). 본문은 **실제 셀 `subList` 복제** → 안의 `<hp:p>` run에 `<hp:t>` 세팅 후 `linesegarray` 제거. **위치**=`side` `TOP/BOTTOM/LEFT/RIGHT`(LEFT/RIGHT는 `width`가 캡션 열폭). **정렬**=캡션 `<hp:p>`의 `paraPrIDRef`(원하는 정렬의 기존 paraPr 재사용; 없으면 새 paraPr 추가 + `itemCnt` 갱신). `autoNum`은 한글 자동 번호. 표 각주는 표 밖 별도 단락(작은 charPr).
 - **추출 섹션 vs 병합본 — 문서 전역 번호(표·그림 캡션 `autoNum`, 미주)는 병합본에서만 해결된다.** 큰 병합 문서에서 한 장(章=한 section)만 떼어내 편집하면, 캡션 `autoNum`은 "이게 전체에서 78번째 표"임을 알 수 없어 단독 파일에선 비거나 다른 번호로 보인다 → **캡션 번호를 손으로 채우지 말 것**(autoNum과 겹쳐 이중 표기). 다시 병합하면 자동으로 맞춰진다. **본문 평문 참조**("<표 78>는", "(그림 18)")는 autoNum이 아니라 고정 텍스트라 자동 갱신 안 됨 → 정석은 병합본에서 **교차참조(cross-ref)**, 정 안 되면 **확정 번호를 수동 기입**을 기본으로. 편집 전 `find`로 본문 참조를 전수 조사해 개수를 먼저 세라(신부전: 전체에 `<표 78>`·`(그림 18)` 딱 2개, 나머지 `<표 >`는 전부 캡션이었다).
 - **표 폭을 일괄 통일하지 마라 — 기존 폭 변이는 대개 의도(설계)다.** 셀 너비 합=표 `sz.width`는 *기술적* 제약이지, "모든 표를 본문 단 전체폭으로"가 아니다. 한 보고서 안에 현황표(넓게)와 정의성/소표(의도적으로 좁게)가 공존하며, **들여쓰기(문단 좌여백) 안에 놓인 표는 단 전체폭이 아니라 그만큼 좁아야** 한다. 폭이 44000 vs 31372로 갈려 있으면 "불일치"라 단정 말고 **의도인지 먼저 의심**하라. 시각적 폭 조정은 XML 일괄보다 **한글에서 표별 수동**이 정답(안질환 2026-07-24: 12표를 48190으로 밀었다가 청구정의표까지 늘려 사용자가 표별로 되돌림). 리사이즈가 정말 필요하면 각 행 셀을 비례 재계산 후 행합을 검증(그건 유효했음).
@@ -206,6 +223,32 @@ for row,vals in enumerate(all_rows):
 
 **미주·각주(endNote/footNote)**: **`<hp:ctrl>` 래핑 필수.** 한 run 안에서 **`[t 앞][ctrl>endNote][t 뒤]`로 인라인 삽입**(기존 미주 run을 clone하면 구조 보장). 번호는 한글이 위치 기준 자동 재계산 → 순서대로 삽입. 각주는 `endNote`→`footNote`, autoNum `numType`을 `ENDNOTE`→`FOOTNOTE`로만 변경. **클론 함정**: `endNote`의 `instId`뿐 아니라 내부 `subList>p`의 **id도 새로 부여**(안 하면 중복 → 불안정). 본문 추출은 `own()`으로 제외(§1).
 
+🔴 **흔한 실패 — 방금 만든 미주 안에 다음 미주를 넣는다.** 한 문장에 두 문헌을 달 때, 첫 미주를 만든 뒤 그 미주 내부를 가리키는 run에 두 번째 ctrl을 `append` 하면 미주 안에 미주가 생긴다. 한글은 이를 표현할 수 없어 **파일을 열 때 오류**를 낸다. `.//hp:run`·`.//hp:p`·`.//hp:endNote`가 전부 `subList`를 타고 들어가는 것이 원인이다.
+
+```xml
+<!-- 잘못된 결과 -->
+<hp:endNote number="36" instId="...80">          <!-- Harrison's -->
+  <hp:subList><hp:p><hp:run>
+    <hp:ctrl><hp:autoNum num="36" numType="ENDNOTE"/></hp:ctrl>
+    <hp:t> Loscalzo J, … Harrison's …; 2022.</hp:t>
+    <hp:ctrl><hp:endNote number="1" instId="...81">…KDIGO…</hp:endNote></hp:ctrl>  <!-- ★ -->
+  </hp:run></hp:p></hp:subList>
+</hp:endNote>
+```
+
+**증상 진단**: 중첩된 것의 `instId`가 바깥 것의 **바로 다음 번호**, 안쪽 `autoNum num`이 **바깥과 동일** → deepcopy-후-append 패턴이 확정된다. **`verify.py`·`audit_*` 전부 PASS한다**(well-formed·id 중복 없음). 실사례: 신부전 제7장 미주 36(2026-07-23) → 이후 병합본 3개로 전파, 발견까지 5일.
+
+```python
+# 안전한 길 — 문단 수준 형제로만 삽입, 본문 문단인지 가드
+uid  = hwpxlib.make_uid(sec)
+tmpl = next(e.getparent() for e in sec.iter(f"{P}endNote") if "Naesens" in "".join(e.itertext()))
+hwpxlib.add_endnotes(para, "…확립된 합병증으로 다룬다.", tmpl,
+                     ["Loscalzo J, … 2022.", "KDIGO … Kidney Int Suppl. 2012;2(1):1-138."], uid)
+# 검사: hwpxlib.nested_notes(sec) 는 항상 [] 여야 한다 (verify.py 3d)
+```
+
+이미 중첩된 파일을 고칠 때는 **지우지 말고 꺼낸다** — 그 미주는 대개 정상 인용이 자리를 잘못 잡은 것이다. 안쪽 `<hp:ctrl>`을 통째로 떼어 본문 run의 해당 문장 뒤로 옮기고 재번호한 뒤, 본문 텍스트가 한 글자도 안 바뀌었음을 `own()` 비교로 확인한다.
+
 **메모(MEMO)**: 검토 주석이 `fieldBegin type="MEMO" > subList`에 저장됨(⚠️ `<hp:memo>`가 **아니다** — `.//hp:memo`로 찾으면 0개인 흔한 오진). `parameters`에 Author·CreateDateTime, `subList`에 메모 텍스트. `fieldBegin`/`fieldEnd`는 `beginIDRef`로 페어링(다른 단락에 걸칠 수 있음), 제거 시 **양쪽 `<hp:ctrl>` 모두 제거**(걸린 본문 `<hp:t>`는 유지). 본문 추출 시 `own()`으로 제외. → **`hwpxlib.read_memos(sec)`**(id·author·date·text) / **`hwpxlib.delete_memo(sec, memo_id=None)`**(한글 '메모 삭제'와 동일 결과 검증됨). 검토자가 accept한 제안은 tracking·메모 모두 삭제, reject는 메모로 남긴다는 관행에 유의.
 
 **변경추적(track change, reviewer 수정)**: 삽입=`<hp:insertBegin Id TcId/>…텍스트…<hp:insertEnd .../>`, 삭제=`<hp:deleteBegin/>…<hp:deleteEnd/>`(빈 마커=문단분리/서식만). 작성자·시각·종류는 **`header.xml`의 `<hp:trackChanges itemCnt><hp:trackChange type="Insert/Delete/CharShape" date author…/>`**. 읽기: **`hwpxlib.read_track_changes(sec)`** → `{"insert":[…],"delete":[…]}`. ⚠️ **수용/거부는 XML로 하지 말 것**(마커+삭제내용 정확 제거가 까다로워 손상 위험) — **한글 COM**으로: `hwp.HAction.Run("TrackChangeApplyAll")`(수용) / `"TrackChangeCancelAll"`(거부). ★ **반환값이 False여도 실제 적용됨** → `insertBegin`/`deleteBegin` 카운트 0으로 검증. COM은 **전 문서 적용**이라 특정 장만 처리하려면 사본에서. (pyhwpx에 `TrackChange*` 메서드군; `IsTrackChange`=추적모드 on/off.)
@@ -256,6 +299,43 @@ for row,vals in enumerate(all_rows):
   old_first.remove(secrun); moved_block[0].insert(0, secrun)
   ```
   이동 후 **첫 문단 secPr 보유·colCount 유지·이미지 수 일치** 검증. 새 섹션은 매니페스트 `<opf:item>`+spine `<opf:itemref>` 둘 다 등록.
+
+### E. 병합 보고서에서 한 장만 떼어내기 (취합 담당자에게 보낼 때)
+
+여러 사람이 장을 나눠 쓰고 한 사람이 합치는 보고서에서는 **"전체 파일 말고 자기 장만"** 을 요구받는다. 장 = 구역(`secPr`) 하나면 떼어낼 수 있다 — `hwpxlib.extract_section(src, "Contents/sectionN.xml", out, title=...)`.
+
+**떼어내기 전 확인 세 가지** (하나라도 어긋나면 손대지 말 것)
+1. 그 장이 **구역 하나**인가 — `len(sec.findall('.//hp:secPr')) == 1`. 장 경계와 구역 경계가 어긋나면 자동 추출이 불가능하다.
+2. 본문에 **하드코딩된 표·그림 번호**가 있는가 — `<표 78>는` 같은 평문 참조는 떼어내는 순간 전부 틀린 번호가 된다. `<표 >`(캡션 autoNum)만 있어야 안전하다. 있으면 먼저 `아래 표는` 식 위치 지시어로 바꾼다.
+3. 그 장이 참조하는 **BinData** — `binaryItemIDRef` → 파일 매핑은 `header.xml`이 **아니라** `content.hpf`의 manifest에 있다(요즘 한글 파일에는 `<hh:binaryItem>`이 아예 없다). 여기를 헛짚으면 그림이 통째로 빠진다.
+
+`extract_section()`이 함께 고치는 것 — **넷 다 해야 한다**: `header.xml`의 `secCnt`(← 안 고치면 열리는데 **빈 한 쪽**), `content.hpf`의 manifest+spine, `META-INF/container.rdf`, 그리고 안 쓰는 BinData·옛 미리보기 제거.
+
+**떼어내면 번호가 어떻게 되는가 (실측 확인함)**
+- 표·그림 캡션 `autoNum`은 **1부터 다시 매겨진다.** "이게 전체에서 78번째 표"는 병합본만 안다. **손으로 채우지 말 것** — 자동번호와 겹쳐 이중 표기가 된다.
+- 미주는 `<hp:endNotePr><hp:numbering type="ON_SECTION" newNum="1">` + `placement END_OF_SECTION`이면 구역 단위라 **그대로 살아남는다.**
+- 쪽 번호도 1부터 시작한다.
+
+**다시 합치면 복원되는가 — 예. 단 「구역 유지」로 넣어야 한다.**
+한글 `InsertFile` 액션에 `KeepSection=1`을 주면 (UI의 「끼워넣기 → 구역 유지」) 붙인 장이 자기 구역을 유지한다. 실측: 160쪽 병합본 끝에 20쪽 단독본을 붙였더니 표가 `<표 93>`~`<표 104>`, 그림이 `<그림 22>`·`<그림 23>`로 **앞에서 이어받고**, 미주는 그 장 안에서 **1)~46)으로 다시 시작**해 장 끝에 붙었다. `secPr`의 `startNum tbl="0" pic="0"`이 "새로 시작하지 않고 이어받음"이라 그렇다.
+**구역 유지 없이 본문에 복사·붙여넣기 하면 구역이 합쳐져 미주가 앞 장 번호에 이어져 버린다.** 취합 담당자에게 이 한 줄을 반드시 같이 보낼 것.
+
+**🔴 미주 배치를 먼저 확인할 것 — 장을 떼어내지 않아도 걸린다.** `secPr/endNotePr`의
+`<hp:placement place>`가 `END_OF_DOCUMENT`(+ `numbering CONTINUOUS`)면, 그 장을 다른 장과 합치는 순간 **미주가 보고서 맨 끝으로 몰리고 「참고문헌」 표제는 빈 채로 남는다.** 단독으로 열면 표제 바로 뒤에 보여서 멀쩡해 보이고, `verify.py`·`audit_layout.py`도 전부 통과한다 — **합쳐서 렌더해야만 드러난다.**
+실사례(2026-07-29 안질환): 표제는 24쪽, 미주 40개는 48~49쪽에 찍혔다. 고치는 것은 두 속성뿐이다.
+
+```python
+num.set("type", "ON_SECTION"); num.set("newNum", "1")     # 구역마다 1번부터
+pl.set("place", "END_OF_SECTION")                          # 그 구역 끝에
+```
+
+그 장의 **마지막 문단이 「참고문헌」 표제**여야 표제와 미주가 맞물린다. 확인 후 바꾼다.
+
+**자동 목차는 별개다.** 정적 텍스트로 만들어진 목차(점선+쪽번호)는 병합해도 갱신되지 않는다. 필드 종류를 먼저 확인하고(`fieldBegin type`), `TABLEOFCONTENTS`가 없으면 취합 담당자가 손으로 맞춰야 한다고 알린다.
+
+**검사기의 지표는 그 문서에만 있는 문자열로.** 두 문서를 합쳐 경계를 판정할 때 뒤 문서의 시작 지표로 흔한 단어를 쓰면 앞 문서에서 먼저 걸려 **고친 뒤에도 FAIL이 난다**(실제로 `아토피피부염`으로 그랬다). 절 표제처럼 유일한 문자열을 쓰고, 고르기 전에 반대쪽에 몇 건 있는지 세라.
+
+**검증은 재병합 렌더로.** 단독본이 혼자 잘 열리는 것은 증거가 아니다 — `scripts/remerge_check.py MASTER.hwpx CHAPTER.hwpx` 가 실제로 끼워 넣고 렌더해 번호를 대조한다.
 
 ---
 

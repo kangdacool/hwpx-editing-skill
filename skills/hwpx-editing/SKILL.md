@@ -62,8 +62,9 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
    `content.hpf`).
 5. **Verify every build**: `python scripts/verify.py EDITED.hwpx --orig ORIG.hwpx`.
    All hard checks must pass (byte-identity self-check, well-formed XML incl.
-   `content.hpf`, zero duplicate ids, zip integrity + mimetype first/STORED). It
-   also prints a **minimal-change diff** so you can confirm *only intended changes*
+   `content.hpf`, zero duplicate ids, IDRef/itemCnt integrity, table cell widths,
+   **no 각주/미주 nested inside another 주석**, zip integrity + mimetype first/STORED).
+   It also prints a **minimal-change diff** so you can confirm *only intended changes*
    are present.
 6. **Render, then look** — `python scripts/audit_layout.py FILE.hwpx`. Steps 1–5 all
    pass on defects that only a render shows: a number broken across two lines
@@ -76,61 +77,46 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
    open the file in 한글 and, for equations/TOC, run 도구→차례 새로 고침 or
    double-click→close to finalize. Say so.
 
-### 표를 다시 채울 때 (재분석 후 원고 표 갱신)
-
-문서에 붙여넣은 표는 **붙여넣은 순간의 분석 결과에 얼어붙는다.** 재분석을 하면 본문은
-사람이 고쳐 쓰지만 표는 따라오지 않아, 표와 본문이 서로 다른 분석을 담은 채 공존한다.
-값을 손으로 옮기지 말고 소스에서 채운다:
-
-```python
-rows = [r[1:] for r in csv.reader(open(SRC, encoding="utf-8"))][1:]
-hwpxlib.fill_table(tbl, rows, row_offset=3, col_offset=1)   # 헤더 3행 · 라벨 열 보존
-```
-
-그러면 (a) 재실행 한 번이 전수 갱신이고, (b) `table_grid()` 로 다시 읽어 같은 소스와
-비교하는 것이 그대로 검증기가 된다. 열을 지우거나 넓혀야 하면 `delete_column` /
-`set_column_width` 를 쓴다 — 폭 합계를 손으로 맞추면 한글이 파일을 거부한다.
+> 재분석 후 원고의 표를 갱신할 때는 **값을 손으로 옮기지 말고 `fill_table()`로 소스에서
+> 채운다** — 그래야 재실행 한 번이 전수 갱신이고, 다시 읽어 소스와 비교하는 것이 그대로
+> 검증기가 된다 (§4 표 다시 채우기).
 
 ## Scripts (`scripts/`) — run these, don't reinvent
 
 | Script | Purpose |
 |---|---|
-| `hwpxlib.py` | Library: `repack_preserve`, `pick_template`/`clone_para`/`run_patterns` (문단 복제 — 직접 하지 말 것), `own` (real body text, excludes 각주·미주·메모 / footnote·endnote·memo), `replace_text`/`insert_ctrls_after`/`find_para` (**`.tail`-safe** 본문 편집 — run 텍스트는 `<hp:t>.text` **및** 인라인 자식(`lineBreak`…)의 `.tail`에 나뉘어 있어 `t.text`만 보면 `lineBreak` 뒤 글자를 통째로 놓침; 손으로 짜지 말 것), **표 편집** `table_grid`/`cell_text` (셀 안 문단 = 줄바꿈이므로 **구분자 보존** 추출), `set_cell_text`, `fill_table` (소스 데이터 → 표 본문), `delete_row`/`delete_column`/`set_column_width`/`table_width_ok` (폭 합계·rowAddr 자동 보존), `find_pic` (문단 위치 말고 BinData id로 그림 찾기), `read_memos`/`delete_memo` (검토 메모 = `fieldBegin type="MEMO"`, NOT `hp:memo`), `read_track_changes` (변경추적 읽기; accept/reject는 한글 COM `TrackChangeApplyAll`/`CancelAll`), `make_uid`, `strip_linesegarray`, `find_duplicate_ids`, `structural_counts`, `replace_image` (swap a picture + update every geometry field incl. the easy-to-forget `imgDim`), plus §7 verify helpers. Import it. |
 | `inspect_hwpx.py FILE [--text] [--breaks]` | Structure dump; find hidden page/column breaks. |
-| `verify.py EDITED [--orig ORIG]` | Run the full §7 checklist; non-zero exit on failure (CI-gateable). |
+| `verify.py EDITED [--orig ORIG]` | The §7 checklist; non-zero exit on failure (CI-gateable). |
+| `audit_layout.py FILE [--pdf X.pdf]` | **렌더 기반** 감사 — 구조검사가 통과하는 결함만 노린다(열 폭을 넘겨 두 줄로 쪼개진 숫자, 각주만 남은 희박 페이지, 목차 쪽번호 불일치). `--pdf` 없으면 한글 COM으로 렌더. |
+| `audit_typography.py FILE [--expect-face 이름] [--expect-body-pt N]` | 글꼴 혼재와 JUSTIFY+KEEP_WORD 자간 벌어짐을 잡는다. `--expect-*`가 어긋나면 종료코드 1. |
+| `remerge_check.py MASTER CHAPTER` | 떼어낸 장이 다시 합쳐지는지 실증 — 실제로 끼워 넣고 렌더해 번호를 읽는다(§6-E). |
 | `selftest.py` | Prove the repacker is lossless without a real file. |
-| `tables_to_xlsx.py FILE [OUT]` | Export tables to Excel (.xlsx), merged cells preserved (needs `openpyxl`). Cells with only an image/equation → `[그림]`/`[수식]`; legacy `.hwp` is refused with guidance. |
-| `audit_typography.py FILE [--expect-face 이름] [--expect-body-pt N]` | 서식 일관성 감사: 실제 쓰이는 charPr을 사용횟수·크기·글꼴로 집계. **글꼴 혼재**와 **JUSTIFY+KEEP_WORD 영문 문단**(자간 벌어짐)을 잡는다. `--expect-*`를 주면 어긋날 때 종료코드 1. |
-| `audit_layout.py FILE [--pdf RENDER.pdf]` | **렌더 기반** 감사 — 구조검사가 통과하는 결함만 노린다: 셀 내용이 열 폭을 넘겨 **숫자가 두 줄로 쪼개진 것**(`4,70`/`1`), 표 각주가 혼자 넘어간 **희박 페이지**, **목차 페이지 번호 ↔ 실제 페이지** 불일치, 표 폭 합계. `--pdf` 없으면 한글 COM으로 직접 렌더. |
-| `hwpx_to_markdown.py FILE [OUT.md]` | Extract the document's text + tables as Markdown (for an LLM to read/summarize; no OUT → stdout). |
-| `hwpx_to_docx.py FILE [OUT.docx]` | Export to Word (.docx), tables + merged cells preserved (needs `python-docx`; for journals / non-한글 co-authors). |
-| `data_to_hwpx_table.py DATA.(xlsx\|csv) TARGET.hwpx [OUT] [--sheet]` | Insert an Excel/CSV table into a 한글 doc, merged cells preserved (needs `openpyxl` for xlsx; TARGET must contain a table for cell styling; CSV encoding auto). |
+| `tables_to_xlsx.py` · `hwpx_to_markdown.py` · `hwpx_to_docx.py` · `data_to_hwpx_table.py` | 변환: 표→Excel, 문서→Markdown(LLM이 읽기용), →Word, Excel/CSV→한글 표. 병합셀 보존. 각각 `-h`. |
 
-Scripts need **lxml** (`pip install lxml`); the table→Excel export also needs **openpyxl**. Python 3.10+.
+**`hwpxlib.py` — import it, don't hand-roll.** 손으로 짜면 틀리는 자리마다 헬퍼가 있다:
+재압축 `repack_preserve`(+`drop`/`rename`) · 본문 읽기 `own` · 본문 편집 `replace_text`/
+`insert_ctrls_after`/`find_para`(`.tail`-safe) · 문단 복제 `pick_template`/`clone_para` ·
+표 `table_grid`/`cell_text`/`set_cell_text`/`fill_table`/`delete_row`/`delete_column`/
+`set_column_width`/`table_width_ok` · 그림 `find_pic`/`replace_image` · 주석
+`add_endnotes`/`clone_endnote`/`nested_notes` · 장 추출 `extract_section` · 메모·변경추적
+`read_memos`/`delete_memo`/`read_track_changes` · 위생 `make_uid`/`strip_linesegarray`/
+`find_duplicate_ids`/`structural_counts`. 각 함수의 함정은 docstring과 가이드에 있다.
+
+Scripts need **lxml**; table→Excel also needs **openpyxl**. Python 3.10+.
 
 ## Where to read in the guide (`references/hwpx-guide.md`)
 
 Load only the section you need — the guide opens with a **"흔한 실패 TOP" (top
 failure modes)**; skim that first, then jump to:
 
-- **§1 Structure & parsing** — namespaces, `own()`, "check all sections", table
-  text per-cell (not bulk `itertext`).
-- **§2 Repack (raw-preserving)** — the crown-jewel repacker. Mirrors `hwpxlib`.
-- **§3 Common rules** — `linesegarray` removal, id-dedup after cloning.
-- **§4 Content editing** — paragraphs, tables (cell width sums must equal table
-  width or 한글 rejects it; merges), **images** (`orgSz`=px×75, size math, swap via
-  `replace_image` so `imgDim` is never forgotten — a stale imgDim crops the picture;
-  verify by *content*/한글-render not extraction order, matplotlib legibility "small figure, big text"),
-  formatting, **endnotes/footnotes** (`<hp:ctrl>` wrapping required), **memos**,
-  and typo-audit scoping (no blanket regex).
-- **§5 Columns · TOC · equations** — `colPr`, `TABLEOFCONTENTS` from outline-level
-  paragraphs, 한컴 equation script (not LaTeX; table of forms).
-- **§6 Page/column management** — **hidden breaks first**, orphaned-heading
-  prevention (`keepWithNext`, no empty paragraph after a heading, conditional
-  `columnBreak`), blank-page cleanup, wide tables → 1-column region + moving a
-  `secPr` block across section boundaries.
-- **§7 Verification checklist** — what `verify.py` automates, plus the round-trip
-  caveat.
+- **§1** 네임스페이스 · `own()` · 섹션 전수 확인 · 셀 단위 텍스트 추출
+- **§2** raw-preserving 재압축 (가장 중요)
+- **§3** `linesegarray` 제거 · 클론 후 id 중복 제거
+- **§4** 문단 · **표**(셀 폭 합 = 표 폭) · **그림**(`orgSz`·`imgDim`·재채우기) ·
+  서식 · **각주/미주** · 메모 · 오타감사 스코핑 — 가장 크니 소절만 골라 읽을 것
+- **§5** 다단 · 자동 목차 · 한컴 수식 스크립트(LaTeX 아님)
+- **§6** 숨은 break → 제목 고아 → 빈 페이지 → 넓은 표/구역 이동 → **E. 장 추출·재병합**
+- **§7** `verify.py`가 자동화하는 것과 한글 왕복 주의
 
 ## Guardrails
 

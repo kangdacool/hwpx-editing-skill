@@ -8,7 +8,8 @@ Usage:
 What it checks (each must pass before you ship a file):
     1. no-op repack is byte-identical to the original          (needs --orig)
     2. every sectionN.xml + content.hpf is well-formed XML
-    3. zero duplicate ids (0 / 2147483648 sentinels ignored)
+    3. zero duplicate ids (0 / 2147483648 sentinels ignored), IDRef/itemCnt integrity,
+       table cell widths, and no 각주/미주 nested inside another 주석
     4. linesegarray inventory (informational)
     5. zip integrity: testzip ok, mimetype first & STORED
     6. structural inventory (pic/tbl/equation/breaks) — compared to --orig if given
@@ -120,6 +121,33 @@ def main() -> int:
                 width_bad.append(f"{name} tbl#{n} width={total} rows={dict(list(off.items())[:3])}")
     hard_ok &= _p(not width_bad, "3c. table cell widths sum to table width",
                   "" if not width_bad else "; ".join(width_bad[:4]))
+
+    # 3d. Footnote/endnote nesting: 한글 cannot represent a 주석 inside another 주석,
+    #     and such a file errors on open. It happens when a second endnote is inserted
+    #     at the same anchor and the target run handle still points INSIDE the endnote
+    #     that was just built (lxml's .//hp:run / .//hp:p descend into subList).
+    #     Everything else here passes on it — the XML is well-formed with unique ids —
+    #     so this needs its own check. Real case: 신부전 제7장 미주 36, 2026-07-23.
+    nested_bad, autonum_odd = [], []
+    for name in H.section_names(z):
+        root = H.etree.fromstring(z.read(name))
+        for note in root.iter(f"{H.P}endNote", f"{H.P}footNote"):
+            inner = [x for x in note.iter(f"{H.P}endNote", f"{H.P}footNote") if x is not note]
+            if inner:
+                nested_bad.append(
+                    f"{name} {H.etree.QName(note).localname}[{note.get('number')}] contains "
+                    f"{len(inner)} nested 주석 (instId "
+                    f"{', '.join(str(x.get('instId')) for x in inner[:3])})")
+            num = note.get("number")
+            an = note.find(f"{H.P}subList/{H.P}p/{H.P}run/{H.P}ctrl/{H.P}autoNum")
+            if an is not None and num and an.get("num") not in (None, num):
+                autonum_odd.append(f"{name} [{num}] autoNum num={an.get('num')}")
+    hard_ok &= _p(not nested_bad, "3d. no 각주/미주 nested inside another 주석",
+                  "" if not nested_bad else "; ".join(nested_bad[:4]))
+    if autonum_odd:
+        print(f"[warn] 3d'. autoNum num != endNote number on {len(autonum_odd)} 주석 "
+              f"(한글 recalculates on open; harmless unless you gate on it): "
+              f"{'; '.join(autonum_odd[:3])}")
 
     # 5. zip integrity (report before 4/6 which are informational)
     zi = H.zip_integrity(z)

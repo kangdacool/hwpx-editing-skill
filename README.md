@@ -77,6 +77,8 @@ skills/hwpx-editing/
     ├── inspect_hwpx.py      # 구조 덤프 · 숨은 페이지/단 나눔 탐지
     ├── verify.py            # §7 빌드 체크리스트 실행 (CI 게이트 가능)
     ├── audit_layout.py      # 렌더 기반 감사 — 셀 줄바꿈·고아 페이지·목차 페이지번호
+    ├── audit_typography.py  # 서식 감사 — 글꼴 혼재·JUSTIFY 자간 벌어짐
+    ├── remerge_check.py     # 떼어낸 장이 다시 합쳐지는지 실증 (번호 이어받기/재시작)
     └── selftest.py          # 실제 파일 없이 재압축 무손실성 증명
 ```
 
@@ -153,6 +155,7 @@ Windows(PowerShell): `./install.ps1 claude` (하위 명령 동일).
 python skills/hwpx-editing/scripts/inspect_hwpx.py 내문서.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py 편집본.hwpx --orig 원본.hwpx
 python skills/hwpx-editing/scripts/audit_layout.py 편집본.hwpx   # 렌더해서 레이아웃 결함 확인
+python skills/hwpx-editing/scripts/remerge_check.py 병합본.hwpx 내장.hwpx  # 떼어낸 장이 다시 합쳐지는지
 python skills/hwpx-editing/scripts/selftest.py     # 파일 없이 동작 점검
 python skills/hwpx-editing/scripts/tables_to_xlsx.py 내문서.hwpx   # 표 전부 엑셀로(병합 보존)
 python skills/hwpx-editing/scripts/hwpx_to_markdown.py 내문서.hwpx  # 본문·표를 마크다운으로(LLM 요약용)
@@ -171,6 +174,19 @@ python skills/hwpx-editing/scripts/hwpx_to_docx.py 내문서.hwpx  # 한글 → 
 5. `content.hpf`를 raw 문자열로 편집 → 백슬래시 오염. *(XML로 파싱)*
 
 …그 외에도 (이미지 순서, `itemCnt`, 2단의 넓은 표, 미주 `ctrl` 래핑 등) 다수.
+
+**가장 지독한 부류는 따로 있습니다 — 모든 구조 검사를 통과하고 한글로 열어야만 드러납니다.**
+가이드는 이들을 한 묶음으로 표시합니다.
+
+- **미주 안에 미주** — 한 문장에 문헌 두 개를 달다가 두 번째 `ctrl`을 방금 만든 미주의
+  `subList` 안에 넣으면 한글이 파일을 열 때 오류를 냅니다. XML은 well-formed, id 중복도
+  없어 전부 PASS합니다. *(`verify.py` 3d 하드체크 + `hwpxlib.add_endnotes()`)*
+- **`tbl@rowCnt` ≠ 실제 행 수** — 문서 전체가 한 쪽으로 무너집니다.
+- **구역을 떼어낸 뒤 `header.xml`의 `secCnt`를 안 고침** — 열리기는 하는데 **빈 한 쪽**입니다.
+  *(`hwpxlib.extract_section()`이 `secCnt`·`content.hpf`·`container.rdf`·BinData를 함께 처리)*
+- **취합될 원고인데 미주 배치가 `END_OF_DOCUMENT`** — 합치는 순간 미주가 보고서 맨 끝으로
+  몰리고 「참고문헌」 표제는 빈 채 남습니다. **단독으로 열면 멀쩡해 보입니다.**
+  *(`remerge_check.py`로 실제로 합쳐서 렌더해 확인)*
 
 ### 호환성
 
@@ -223,6 +239,8 @@ skills/hwpx-editing/
     ├── inspect_hwpx.py      # dump structure; find hidden page/column breaks
     ├── verify.py            # run the §7 build checklist (CI-gateable)
     ├── audit_layout.py      # audit the RENDER — wrapped cells, orphan pages, TOC numbers
+    ├── audit_typography.py  # audit formatting — mixed fonts, JUSTIFY letter-spacing
+    ├── remerge_check.py     # prove an extracted chapter re-merges with correct numbering
     └── selftest.py          # prove the repacker is lossless — no real file needed
 ```
 
@@ -298,6 +316,7 @@ You can also run the tools directly:
 python skills/hwpx-editing/scripts/inspect_hwpx.py mydoc.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py edited.hwpx --orig original.hwpx
 python skills/hwpx-editing/scripts/audit_layout.py edited.hwpx   # render, then check the layout
+python skills/hwpx-editing/scripts/remerge_check.py master.hwpx chapter.hwpx  # does an extracted chapter re-merge cleanly?
 python skills/hwpx-editing/scripts/selftest.py     # sanity check, no file needed
 python skills/hwpx-editing/scripts/tables_to_xlsx.py mydoc.hwpx   # tables → Excel (merges preserved)
 python skills/hwpx-editing/scripts/hwpx_to_markdown.py mydoc.hwpx  # extract text/tables as Markdown
@@ -316,6 +335,22 @@ A taste of the "common failures" the guide front-loads:
 5. Editing `content.hpf` as a raw string → backslash corruption. *(parse as XML)*
 
 …and more (image order, `itemCnt`, wide tables in 2-column regions, endnote wrapping).
+
+**The nastiest class passes every structural check and only shows up in 한글.** The guide
+groups them together.
+
+- **An endnote inside an endnote** — citing two sources in one sentence and appending the
+  second `ctrl` into the `subList` of the endnote you just built. 한글 errors on open; the
+  XML is well-formed with unique ids, so everything else passes.
+  *(`verify.py` check 3d + `hwpxlib.add_endnotes()`)*
+- **`tbl@rowCnt` ≠ actual row count** — the whole document collapses onto one page.
+- **Pulling a section out without fixing `secCnt` in `header.xml`** — the file opens and
+  renders **one blank page**. *(`hwpxlib.extract_section()` handles `secCnt`,
+  `content.hpf`, `container.rdf` and the BinData together)*
+- **A chapter bound for a merged report whose endnotes are `END_OF_DOCUMENT`** — on merge
+  they all pile up at the very end of the report and the "References" heading is left
+  empty. **Opened on its own it looks fine.** *(`remerge_check.py` actually merges and
+  renders to check)*
 
 ### Compatibility
 

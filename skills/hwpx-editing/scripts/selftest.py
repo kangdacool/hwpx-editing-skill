@@ -429,6 +429,46 @@ def main() -> int:
     print(f"[{'PASS' if e15 else 'FAIL'}] 15. .tail-safe edits: replace_text hits "
           f"lineBreak tail ({n_tail}), insert_ctrls_after splits .text ({ins}), find_para ({found})")
 
+    # 16. Nested 주석: a 미주 inside another 미주 makes 한글 error on open, yet the
+    #     XML stays well-formed with unique ids — every other check passes on it.
+    #     Prove nested_notes() flags it, clone_endnote() refuses a dirty template,
+    #     and add_endnotes() attaches two notes as run siblings while refusing a
+    #     paragraph that lives inside a subList.
+    note_xml = (f'<hp:ctrl xmlns:hp="{pns}"><hp:endNote number="1" instId="100">'
+                '<hp:subList><hp:p id="101"><hp:run charPrIDRef="0">'
+                '<hp:ctrl><hp:autoNum num="1" numType="ENDNOTE"/></hp:ctrl>'
+                '<hp:t> Ref one.</hp:t>{INNER}</hp:run></hp:p></hp:subList>'
+                '</hp:endNote></hp:ctrl>')
+    clean = H.etree.fromstring(note_xml.replace("{INNER}", "").encode("utf-8"))
+    dirty = H.etree.fromstring(note_xml.replace(
+        "{INNER}", '<hp:ctrl><hp:endNote number="1" instId="102"><hp:subList>'
+                   '<hp:p id="103"><hp:run charPrIDRef="0"><hp:t> Ref two.</hp:t>'
+                   '</hp:run></hp:p></hp:subList></hp:endNote></hp:ctrl>').encode("utf-8"))
+    flagged = len(H.nested_notes(dirty)) == 1 and not H.nested_notes(clean)
+    try:
+        H.clone_endnote(dirty, "X", lambda: 900)
+        refused_dirty = False
+    except ValueError:
+        refused_dirty = True
+    body = H.etree.fromstring((
+        f'<hp:p xmlns:hp="{pns}" id="200"><hp:run charPrIDRef="0">'
+        '<hp:t>본문 문장이다. 다음 문장.</hp:t></hp:run></hp:p>').encode("utf-8"))
+    uid = H.make_uid(H.etree.fromstring(f'<hp:sec xmlns:hp="{pns}"/>'.encode("utf-8")))
+    H.add_endnotes(body, "본문 문장이다.", clean, ["Ref A.", "Ref B."], uid)
+    kinds = [H.etree.QName(c).localname for c in body.find(f"{{{pns}}}run")]
+    siblings = kinds == ["t", "ctrl", "ctrl", "t"] and not H.nested_notes(body)
+    try:
+        H.add_endnotes(dirty.find(f".//{{{pns}}}p"), "Ref", clean, ["X"], uid)
+        refused_sub = False
+    except ValueError:
+        refused_sub = True
+    e16 = (flagged and refused_dirty and siblings and refused_sub
+           and not H.find_duplicate_ids(body))
+    ok &= e16
+    print(f"[{'PASS' if e16 else 'FAIL'}] 16. nested 주석: detected ({flagged}), dirty "
+          f"template refused ({refused_dirty}), add_endnotes inserts siblings "
+          f"({siblings}), subList paragraph refused ({refused_sub})")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1
