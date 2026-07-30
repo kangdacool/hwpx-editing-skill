@@ -96,6 +96,7 @@ skills/hwpx-editing/
     ├── audit_layout.py      # 렌더 기반 감사 — 셀 줄바꿈·고아 페이지·목차 페이지번호
     ├── audit_typography.py  # 서식 감사 — 글꼴 혼재·JUSTIFY 자간 벌어짐
     ├── remerge_check.py     # 떼어낸 장이 다시 합쳐지는지 실증 (번호 이어받기/재시작)
+    ├── hwpx_guard.py        # PostToolUse 훅 — 방금 쓴 파일이 깨졌으면 그 자리에서 알림
     └── selftest.py          # 실제 파일 없이 재압축 무손실성 증명
 ```
 
@@ -104,6 +105,17 @@ skills/hwpx-editing/
 증명하므로, 내 문서를 건드리기 전에 신뢰할 수 있습니다. 여기에 더해, 실제 한글 문서
 **3종(본문 4·10·12개 섹션 규모, 모두 이미지·표·수식·미주 포함)**에서 편집 후 한글로
 다시 열어 정상 동작을 확인했습니다.
+
+### 검증을 에이전트의 선택에 맡기지 않는다
+
+검증기가 있어도 에이전트가 **돌리기로 선택해야** 돌아갑니다. 안 돌리면 깨진 파일이
+그대로 사용자에게 갑니다. 플러그인으로 설치하면 `hwpx_guard.py`가 **PostToolUse 훅**으로
+붙어서, Bash 명령이 끝날 때마다 그 명령에 등장한 `.hwpx` 중 **방금 수정된 것**만 골라
+구조 하드체크를 돌립니다. 실패하면 사유가 에이전트에게 전달돼 스스로 고칩니다.
+통과하면 아무것도 출력하지 않습니다.
+
+훅은 하네스가 실행하므로 **모델 컨텍스트를 전혀 쓰지 않습니다** — 규칙을 산문으로 더
+적는 것과 달리 토큰 비용이 0입니다. 렌더 감사(한글 COM 필요)는 훅에서 돌리지 않습니다.
 
 ### 누가 어떻게 쓰나
 
@@ -296,6 +308,7 @@ skills/hwpx-editing/
     ├── audit_layout.py      # audit the RENDER — wrapped cells, orphan pages, TOC numbers
     ├── audit_typography.py  # audit formatting — mixed fonts, JUSTIFY letter-spacing
     ├── remerge_check.py     # prove an extracted chapter re-merges with correct numbering
+    ├── hwpx_guard.py        # PostToolUse hook — flags a file it just wrote, on the spot
     └── selftest.py          # prove the repacker is lossless — no real file needed
 ```
 
@@ -304,6 +317,19 @@ is **byte-identical** to the source. `selftest.py` proves it on a synthetic file
 can trust it before touching your own documents. Beyond the synthetic self-test, it's
 been validated on **3 real 한글 documents** (spanning 4, 10, and 12 sections, each with
 images, tables, equations, and endnotes) — edited and re-opened in 한글.
+
+### Verification isn't left to the agent's discretion
+
+A verifier only runs if the agent *chooses* to run it, and a file that skipped the
+check reaches the user looking exactly like one that passed. Installed as a plugin,
+`hwpx_guard.py` registers as a **PostToolUse hook**: after each Bash command it takes
+the `.hwpx` files named in that command that were *just modified* and puts them
+through the structural hard checks. On failure the reason goes back to the agent,
+which fixes it there and then. On success it prints nothing.
+
+The harness runs the hook, so it costs **no model context at all** — unlike writing
+another paragraph of rules, its token cost is zero. The render audits stay out of it;
+they need 한글 over COM and are too slow for a hook.
 
 ### Who is this for
 
