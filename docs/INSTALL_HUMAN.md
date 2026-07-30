@@ -13,7 +13,18 @@ This guide covers **[installing the skill](#installing-the-skill)** into Claude 
 
 Every method just puts the `skills/hwpx-editing/` folder where your agent looks for skills. The included installer does this for you.
 
-#### With the installer (recommended)
+#### As a Claude Code plugin (no clone needed)
+
+```
+/plugin marketplace add kangdacool/hwpx-editing-skill
+/plugin install hwpx-editing@kangdacool
+```
+
+This route installs the skill and the `/hwpx` command together, and updates in place
+with `/plugin marketplace update kangdacool`. The installer below is for the other
+agents, or for pinning the skill to a single project.
+
+#### With the installer (recommended for other agents)
 
 ```bash
 # macOS / Linux
@@ -86,7 +97,17 @@ You should see a series of `PASS` lines ending in `RESULT: ALL PASS`.
 
 모든 방법은 결국 `skills/hwpx-editing/` 폴더를 에이전트가 스킬을 찾는 위치에 두는 것뿐입니다. 포함된 설치 스크립트가 대신 해줍니다.
 
-#### 설치 스크립트 사용 (권장)
+#### Claude Code 플러그인으로 (클론 불필요)
+
+```
+/plugin marketplace add kangdacool/hwpx-editing-skill
+/plugin install hwpx-editing@kangdacool
+```
+
+스킬과 `/hwpx` 명령이 함께 설치되고, `/plugin marketplace update kangdacool`로 갱신합니다.
+아래 설치 스크립트는 그 밖의 에이전트용이거나, 스킬을 특정 프로젝트에만 두고 싶을 때 씁니다.
+
+#### 설치 스크립트 사용 (그 밖의 에이전트)
 
 ```bash
 # macOS / Linux

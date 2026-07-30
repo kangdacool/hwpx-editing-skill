@@ -1,0 +1,28 @@
+{
+  "name": "kangdacool",
+  "owner": {
+    "name": "kangdacool",
+    "url": "https://github.com/kangdacool"
+  },
+  "description": "HWPX(한글) 문서를 안 깨고 편집하기 위한 에이전트 스킬.",
+  "plugins": [
+    {
+      "name": "hwpx-editing",
+      "displayName": "HWPX Editing",
+      "source": "./",
+      "skills": ["./skills/hwpx-editing"],
+      "commands": ["./.claude/commands/"],
+      "description": "한글(.hwpx) 문서를 안 깨고 읽고 편집한다. 바이트 단위로 무손실인 raw-preserving 재압축, 렌더 기반 레이아웃·서식 감사, 구조 검증기를 함께 제공한다. Edit HWPX (Hangul) documents without corrupting them: byte-identical raw-preserving repack, render-level layout and typography audits, and a structural verifier.",
+      "author": {
+        "name": "kangdacool",
+        "url": "https://github.com/kangdacool"
+      },
+      "homepage": "https://github.com/kangdacool/hwpx-editing-skill#readme",
+      "repository": "https://github.com/kangdacool/hwpx-editing-skill",
+      "license": "MIT",
+      "keywords": ["hwpx", "hwp", "hangul", "korean", "hancom", "hwpml", "owpml", "document"],
+      "category": "productivity",
+      "strict": false
+    }
+  ]
+}

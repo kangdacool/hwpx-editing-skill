@@ -110,6 +110,17 @@ Claude Code · Codex · Cursor · Gemini CLI 등에 스킬 폴더를 설치해 �
 
 ### 빠른 설치 (한 줄)
 
+**Claude Code — 플러그인으로 (클론 불필요)**
+
+```
+/plugin marketplace add kangdacool/hwpx-editing-skill
+/plugin install hwpx-editing@kangdacool
+```
+
+스킬과 `/hwpx` 명령이 함께 설치되고, `/plugin marketplace update kangdacool`로 갱신합니다.
+
+**그 밖의 에이전트 — 스킬 폴더로**
+
 에이전트를 고르세요. 아래 명령을 그대로 실행하면 됩니다.
 
 ```bash
@@ -192,7 +203,7 @@ python skills/hwpx-editing/scripts/hwpx_to_docx.py 내문서.hwpx  # 한글 → 
 
 | 에이전트 | 설치 위치 | 비고 |
 |---|---|---|
-| Claude Code | `~/.claude/skills/` (개인) 또는 `.claude/skills/` (프로젝트) | `/skills`로 확인 |
+| Claude Code | 플러그인(`/plugin install`), 또는 `~/.claude/skills/`(개인)·`.claude/skills/`(프로젝트) | `/skills`로 확인 |
 | Claude Desktop | `~/.claude/skills/` | Claude Code와 동일 경로 |
 | Claude.ai (Pro/Max/Team/Enterprise) | 설정 → Features → 스킬 zip 업로드 | 코드 실행 필요 |
 | OpenAI Codex | `~/.codex/skills/` (또는 레포 루트 `AGENTS.md`) | [AGENTS.md](AGENTS.md) 포함 |
@@ -271,6 +282,18 @@ triggers automatically on `.hwpx` / 한글 work afterward. Installation is the
 one-liner in **[Quick install](#quick-install-one-line)** below.
 
 ### Quick install (one line)
+
+**Claude Code — as a plugin (no clone)**
+
+```
+/plugin marketplace add kangdacool/hwpx-editing-skill
+/plugin install hwpx-editing@kangdacool
+```
+
+This installs the skill plus the `/hwpx` command. Update with
+`/plugin marketplace update kangdacool`.
+
+**Any other agent — as a skill folder**
 
 Pick your agent and run the commands below.
 
@@ -356,7 +379,7 @@ groups them together.
 
 | Agent | Install location | Notes |
 |---|---|---|
-| Claude Code | `~/.claude/skills/` (personal) or `.claude/skills/` (project) | verify with `/skills` |
+| Claude Code | plugin (`/plugin install`), or `~/.claude/skills/` (personal) · `.claude/skills/` (project) | verify with `/skills` |
 | Claude Desktop | `~/.claude/skills/` | same path as Claude Code |
 | Claude.ai (Pro/Max/Team/Enterprise) | Settings → Features → upload the skill zip | code execution required |
 | OpenAI Codex | `~/.codex/skills/` (or `AGENTS.md` at repo root) | [AGENTS.md](AGENTS.md) included |
