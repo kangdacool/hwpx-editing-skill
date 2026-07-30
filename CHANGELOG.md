@@ -3,6 +3,36 @@
 이 파일은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식을 따르고,
 버전은 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 씁니다.
 
+## [Unreleased]
+
+### Added
+
+- **A PostToolUse hook that runs the structural checks whether or not the agent
+  chose to.** After any Bash command, `.hwpx` files named in it that were just
+  modified are put through `verify.py`; a failure is reported back so it gets
+  fixed at the moment it is introduced rather than after delivery. It costs no
+  model context — the harness runs it — and stays silent when everything passes.
+  Registered via `hooks/hooks.json` for plugin installs.
+- `tbl@rowCnt` and `header.xml` `secCnt` are now **gated**, not just maintained.
+  Both are documented failure modes (흔한 실패 20·21) that leave the XML
+  well-formed with unique ids, so nothing else caught them. Exposed as
+  `hwpxlib.rowcnt_mismatches()` / `seccnt_mismatch()` and checked by `selftest.py`.
+
+### Fixed
+
+- `table_width_ok()` raised `AttributeError` on a table missing `sz`/`cellSz`/
+  `cellSpan`/`cellAddr`, which aborted the whole `verify.py` run instead of
+  reporting. It now returns "no verdict" (`total is None`) and the check reports
+  how many tables were unmeasurable. A verifier that throws on one odd table is
+  worse than one that says it could not tell.
+- Both new gates treat an **absent** attribute as stating nothing rather than as
+  a failure, and the `secCnt` lookup no longer assumes the `hh:` prefix — a head
+  element carrying a default namespace was previously invisible to it.
+
+### Changed
+
+- `CHANGELOG` 0.1.0 below: corrected an inaccurate claim (see that entry).
+
 ## [0.1.0] — 2026-07-30
 
 First tagged release. The skill has been public since 2026-07-06; this collects what
@@ -42,9 +72,12 @@ is in it as of today so a version can be pinned.
 - `verify.py` — runs the §7 build checklist and can gate CI. Covers IDRef/`itemCnt`
   integrity across `charPr`/`paraPr`/`borderFill`/`style`, and flags only
   newly-introduced duplicate ids (한글 legitimately reuses ids on empty paragraphs).
-- Hard checks for the failures that pass every structural check and surface only when
-  한글 opens the file: an endnote nested inside an endnote, `tbl@rowCnt` disagreeing
-  with the actual row count, and a stale `secCnt` after a section is extracted.
+- A hard check for an endnote nested inside another endnote — a file that stays
+  well-formed with unique ids and still errors when 한글 opens it.
+  *(Corrected after release: this entry also listed `tbl@rowCnt` and `secCnt` as hard
+  checks. They were not. `hwpxlib` keeps both correct when you go through its helpers —
+  `extract_section()` rewrites `secCnt`, the table helpers rewrite `rowCnt` — but
+  nothing verified a document where they were already wrong. Gated in Unreleased above.)*
 - `audit_layout.py` — render-based audit: cell content that wrapped, near-empty and
   blank pages, table-of-contents page numbers that disagree with the caption's real
   page, and cell width sums. Checks 1–4 read the PDF only, so any rendered PDF works,
