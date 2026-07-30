@@ -587,25 +587,78 @@ def table_width_ok(tbl):
     Rows under a vertical merge carry no <hp:tc> for the covered columns, so
     their own widths sum short; the carried width is added back here. Forgetting
     that turns every header with a rowSpan into a false alarm.
+
+    A table missing the geometry elements this reads (`sz`, `cellSz`, `cellSpan`,
+    `cellAddr`) yields `(True, None, [])` — "no verdict" rather than an exception.
+    Callers gate builds on this, and a verifier that raises on an odd table stops
+    the whole run instead of reporting it; `total is None` says it was unmeasurable.
     """
     sz = tbl.find(f"{P}sz")
+    if sz is None or sz.get("width") is None:
+        return True, None, []
     total = int(sz.get("width"))
     sums = []
     pending = {}                       # colAddr -> [rows still covered, width]
     for tr in table_rows(tbl):
         carried = sum(w for _rows, w in pending.values())
-        own = sum(int(tc.find(f"{P}cellSz").get("width")) for tc in table_cells(tr))
+        try:
+            own = sum(int(tc.find(f"{P}cellSz").get("width")) for tc in table_cells(tr))
+        except (AttributeError, TypeError, ValueError):
+            return True, None, []
         sums.append(own + carried)
         for addr in list(pending):
             pending[addr][0] -= 1
             if pending[addr][0] <= 0:
                 del pending[addr]
         for tc in table_cells(tr):
-            span = int(tc.find(f"{P}cellSpan").get("rowSpan"))
+            span_el, addr_el = tc.find(f"{P}cellSpan"), tc.find(f"{P}cellAddr")
+            if span_el is None or addr_el is None:
+                return True, None, []
+            span = int(span_el.get("rowSpan"))
             if span > 1:
-                pending[int(tc.find(f"{P}cellAddr").get("colAddr"))] = \
+                pending[int(addr_el.get("colAddr"))] = \
                     [span - 1, int(tc.find(f"{P}cellSz").get("width"))]
     return all(s == total for s in sums), total, sums
+
+
+def rowcnt_mismatches(root):
+    """[(index, declared, actual)] for every <hp:tbl> whose rowCnt disagrees with
+    its real <hp:tr> count.
+
+    한글 reads the table by the declared count, so a mismatch collapses the whole
+    document onto one page — and nothing else catches it: the XML is well-formed,
+    the ids are unique, and the cell widths still add up (§4-표, 흔한 실패 20).
+    A table with no rowCnt attribute states nothing, so it is not a mismatch.
+    """
+    out = []
+    for i, tbl in enumerate(root.iter(f"{P}tbl")):
+        declared = tbl.get("rowCnt")
+        if declared is None or not declared.isdigit():
+            continue
+        actual = len(table_rows(tbl))
+        if int(declared) != actual:
+            out.append((i, int(declared), actual))
+    return out
+
+
+def seccnt_mismatch(z: zipfile.ZipFile):
+    """(declared, actual) when header.xml's secCnt contradicts the number of
+    sectionN.xml entries, else None.
+
+    Pull a 장 out of a merged report and leave secCnt alone and the file still
+    OPENS — it just shows one blank page (§6-E, 흔한 실패 21). Returns None when
+    the attribute is absent: it is optional, and the head element may carry a
+    default namespace rather than the hh: prefix, so absence states nothing.
+    """
+    try:
+        hdr = z.read("Contents/header.xml")
+    except KeyError:
+        return None
+    m = re.search(rb'<(?:\w+:)?head\b[^>]*?\bsecCnt="(\d+)"', hdr)
+    if not m:
+        return None
+    declared, actual = int(m.group(1)), len(section_names(z))
+    return None if declared == actual else (declared, actual)
 
 
 def set_column_width(tbl, col_addr, delta, take_from=()):

@@ -469,6 +469,47 @@ def main() -> int:
           f"template refused ({refused_dirty}), add_endnotes inserts siblings "
           f"({siblings}), subList paragraph refused ({refused_sub})")
 
+    # 17. The three gates that only a stated-vs-real contradiction can catch, plus
+    #     the no-verdict path. rowCnt/secCnt mismatches leave the XML well-formed
+    #     with unique ids, so nothing else here sees them; and a table missing its
+    #     geometry must yield "no verdict" rather than raising — a verifier that
+    #     throws on an odd table stops the run instead of reporting it.
+    tbl_ok = H.etree.fromstring((
+        f'<hp:tbl xmlns:hp="{pns}" rowCnt="2"><hp:tr/><hp:tr/></hp:tbl>').encode("utf-8"))
+    tbl_bad = H.etree.fromstring((
+        f'<hp:tbl xmlns:hp="{pns}" rowCnt="5"><hp:tr/><hp:tr/></hp:tbl>').encode("utf-8"))
+    tbl_silent = H.etree.fromstring((
+        f'<hp:tbl xmlns:hp="{pns}"><hp:tr/></hp:tbl>').encode("utf-8"))
+    wrap = lambda t: H.etree.fromstring(
+        (f'<hp:sec xmlns:hp="{pns}">' + H.etree.tostring(t).decode() + '</hp:sec>').encode("utf-8"))
+    rc = (not H.rowcnt_mismatches(wrap(tbl_ok))
+          and H.rowcnt_mismatches(wrap(tbl_bad)) == [(0, 5, 2)]
+          and not H.rowcnt_mismatches(wrap(tbl_silent)))
+
+    # table_width_ok must not raise on a table with no <hp:sz>/<hp:cellSz>
+    try:
+        wv_ok, wv_total, _ = H.table_width_ok(tbl_silent)
+        no_verdict = wv_ok and wv_total is None
+    except Exception:
+        no_verdict = False
+
+    def _z(sec_count, seccnt_attr):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            hdr = f'<hh:head xmlns:hh="x" {seccnt_attr}/>'.encode("utf-8")
+            zf.writestr("Contents/header.xml", hdr)
+            for i in range(sec_count):
+                zf.writestr(f"Contents/section{i}.xml", b"<x/>")
+        return zipfile.ZipFile(buf)
+
+    sc = (H.seccnt_mismatch(_z(1, 'secCnt="1"')) is None            # agrees
+          and H.seccnt_mismatch(_z(1, 'secCnt="3"')) == (3, 1)      # contradicts
+          and H.seccnt_mismatch(_z(2, "")) is None)                 # absent = no claim
+    e17 = rc and sc and no_verdict
+    ok &= e17
+    print(f"[{'PASS' if e17 else 'FAIL'}] 17. stated-vs-real gates: rowCnt ({rc}), "
+          f"secCnt ({sc}), width no-verdict instead of raise ({no_verdict})")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1

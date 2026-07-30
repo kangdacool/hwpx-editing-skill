@@ -9,7 +9,8 @@ What it checks (each must pass before you ship a file):
     1. no-op repack is byte-identical to the original          (needs --orig)
     2. every sectionN.xml + content.hpf is well-formed XML
     3. zero duplicate ids (0 / 2147483648 sentinels ignored), IDRef/itemCnt integrity,
-       table cell widths, and no 각주/미주 nested inside another 주석
+       table cell widths, no 각주/미주 nested inside another 주석, tbl@rowCnt vs the
+       real row count, and header.xml secCnt vs the number of sections
     4. linesegarray inventory (informational)
     5. zip integrity: testzip ok, mimetype first & STORED
     6. structural inventory (pic/tbl/equation/breaks) — compared to --orig if given
@@ -111,16 +112,21 @@ def main() -> int:
     # 3c. Table geometry: every row's cell widths must sum to the table width
     #     (한글 rejects a table whose columns do not add up). Any column
     #     insert/delete/resize can break this, and nothing else here catches it.
-    width_bad = []
+    width_bad, width_skipped = [], 0
     for name in H.section_names(z):
         root = H.etree.fromstring(z.read(name))
         for n, tbl in enumerate(root.iter(f"{H.P}tbl")):
             ok, total, sums = H.table_width_ok(tbl)
+            if total is None:
+                width_skipped += 1
+                continue
             if not ok:
                 off = {i: s for i, s in enumerate(sums) if s != total}
                 width_bad.append(f"{name} tbl#{n} width={total} rows={dict(list(off.items())[:3])}")
     hard_ok &= _p(not width_bad, "3c. table cell widths sum to table width",
-                  "" if not width_bad else "; ".join(width_bad[:4]))
+                  "; ".join(width_bad[:4]) if width_bad
+                  else (f"{width_skipped} table(s) had no measurable geometry"
+                        if width_skipped else ""))
 
     # 3d. Footnote/endnote nesting: 한글 cannot represent a 주석 inside another 주석,
     #     and such a file errors on open. It happens when a second endnote is inserted
@@ -148,6 +154,30 @@ def main() -> int:
         print(f"[warn] 3d'. autoNum num != endNote number on {len(autonum_odd)} 주석 "
               f"(한글 recalculates on open; harmless unless you gate on it): "
               f"{'; '.join(autonum_odd[:3])}")
+
+    # 3e. tbl@rowCnt vs the actual <hp:tr> count. 한글 reads the table by the
+    #     declared count, so a mismatch collapses the whole document onto one page
+    #     (§4-표, 흔한 실패 20). Every other check here passes on it: the XML is
+    #     well-formed, ids are unique, and the cell widths still add up.
+    rowcnt_bad = []
+    for name in H.section_names(z):
+        root = H.etree.fromstring(z.read(name))
+        for n, declared, actual in H.rowcnt_mismatches(root):
+            rowcnt_bad.append(f"{name} tbl#{n} rowCnt={declared} but {actual} <hp:tr>")
+    hard_ok &= _p(not rowcnt_bad, "3e. tbl@rowCnt matches the actual row count",
+                  "" if not rowcnt_bad else "; ".join(rowcnt_bad[:4]))
+
+    # 3f. header.xml's secCnt vs the number of sectionN.xml entries. Extract a 장
+    #     from a merged report and leave secCnt alone and the file still OPENS —
+    #     it just shows a single blank page (§6-E, 흔한 실패 21).
+    #     Absence is not a failure: the attribute is optional and the head element
+    #     may carry a default namespace instead of the hh: prefix. Only a stated
+    #     count that contradicts the entries is a hard failure.
+    mismatch = H.seccnt_mismatch(z)
+    hard_ok &= _p(mismatch is None, "3f. header.xml secCnt matches the section count",
+                  "" if mismatch is None else
+                  f"secCnt={mismatch[0]} but {mismatch[1]} sectionN.xml "
+                  f"({', '.join(H.section_names(z)[:4])})")
 
     # 5. zip integrity (report before 4/6 which are informational)
     zi = H.zip_integrity(z)
