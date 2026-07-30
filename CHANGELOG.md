@@ -3,7 +3,12 @@
 이 파일은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식을 따르고,
 버전은 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 씁니다.
 
-## [Unreleased]
+## [0.1.1] — 2026-07-30
+
+Closes the gap between what the guide documents and what the tooling actually
+enforces: two documented failure modes were described but never checked, the
+checks only ran when the agent chose to run them, and nothing pinned the helpers'
+output against drift.
 
 ### Added
 
@@ -108,4 +113,5 @@ is in it as of today so a version can be pinned.
 - UTF-8 console output on Windows (cp949 code pages).
 - `own()` footnote filter and a data-descriptor guard in the zip reader.
 
+[0.1.1]: https://github.com/kangdacool/hwpx-editing-skill/releases/tag/v0.1.1
 [0.1.0]: https://github.com/kangdacool/hwpx-editing-skill/releases/tag/v0.1.0
