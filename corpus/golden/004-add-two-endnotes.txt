@@ -1,0 +1,44 @@
+entries changed:   Contents/section0.xml
+entries added:     (none)
+entries dropped:   (none)
+byte-identical:    Contents/content.hpf, Contents/header.xml, Contents/section1.xml, META-INF/container.rdf, mimetype
+verify hard checks: PASS
+seccnt:            ok
+structure Contents/section0.xml: p=12 tbl=1 pic=0 eq=0 lineseg=7
+  rowcnt mismatches: none
+  nested 주석:        0
+structure Contents/section1.xml: p=1 tbl=0 pic=0 eq=0 lineseg=0
+  rowcnt mismatches: none
+  nested 주석:        0
+--- minimal diff: Contents/section0.xml
+  -<hp:t>첫 문단이다. 두 번째 문장.</hp:t>
+  +<hp:t>첫 문단이다.</hp:t>
+  +<hp:ctrl>
+  +<hp:endNote number="1" instId="612">
+  +<hp:subList>
+  +<hp:p id="614" paraPrIDRef="0">
+  +<hp:run charPrIDRef="0">
+  +<hp:ctrl>
+  +<hp:autoNum num="1" numType="ENDNOTE"/>
+  +</hp:ctrl>
+  +<hp:t>Ref A.</hp:t>
+  +</hp:run>
+  +</hp:p>
+  +</hp:subList>
+  +</hp:endNote>
+  +</hp:ctrl>
+  +<hp:ctrl>
+  +<hp:endNote number="1" instId="616">
+  +<hp:subList>
+  +<hp:p id="618" paraPrIDRef="0">
+  +<hp:run charPrIDRef="0">
+  +<hp:ctrl>
+  +<hp:autoNum num="1" numType="ENDNOTE"/>
+  +</hp:ctrl>
+  +<hp:t>Ref B.</hp:t>
+  +</hp:run>
+  +</hp:p>
+  +</hp:subList>
+  +</hp:endNote>
+  +</hp:ctrl>
+  +<hp:t> 두 번째 문장.</hp:t>

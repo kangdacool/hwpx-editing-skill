@@ -117,6 +117,9 @@ skills/hwpx-editing/
 훅은 하네스가 실행하므로 **모델 컨텍스트를 전혀 쓰지 않습니다** — 규칙을 산문으로 더
 적는 것과 달리 토큰 비용이 0입니다. 렌더 감사(한글 COM 필요)는 훅에서 돌리지 않습니다.
 
+헬퍼 쪽은 [`corpus/`](corpus/)의 골든 파일 회귀가 잡습니다 — 표 편집·미주 추가·구역
+분리를 실제로 돌려서 **출력이 예전과 달라지지 않았는지** 비교하며, CI에서 같이 돕니다.
+
 ### 누가 어떻게 쓰나
 
 크게 두 부류로 나뉩니다. 자기에게 맞는 쪽만 보면 됩니다.
@@ -330,6 +333,10 @@ which fixes it there and then. On success it prints nothing.
 The harness runs the hook, so it costs **no model context at all** — unlike writing
 another paragraph of rules, its token cost is zero. The render audits stay out of it;
 they need 한글 over COM and are too slow for a hook.
+
+The helpers themselves are pinned by the golden-file corpus in [`corpus/`](corpus/),
+which runs real table edits, endnote insertions and a section extraction and compares
+the result against committed expectations. It runs in CI alongside the selftest.
 
 ### Who is this for
 

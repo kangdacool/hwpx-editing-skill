@@ -13,6 +13,13 @@
   fixed at the moment it is introduced rather than after delivery. It costs no
   model context — the harness runs it — and stays silent when everything passes.
   Registered via `hooks/hooks.json` for plugin installs.
+- **A golden-file corpus** (`corpus/`) that pins what the editing helpers actually
+  produce. `selftest.py` proves the primitives behave; this proves the output hasn't
+  drifted. Five cases cover row deletion, column widening, cell edits, two endnotes at
+  one anchor, and section extraction. The source document is *generated in code*, so no
+  real document is ever committed, and comparison is structural rather than byte-exact —
+  a re-deflated entry varies with the zlib version, and CI runs on a different platform
+  than development. Wired into CI; `--update` regenerates the goldens for review.
 - `tbl@rowCnt` and `header.xml` `secCnt` are now **gated**, not just maintained.
   Both are documented failure modes (흔한 실패 20·21) that leave the XML
   well-formed with unique ids, so nothing else caught them. Exposed as

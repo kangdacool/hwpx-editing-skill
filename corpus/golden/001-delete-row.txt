@@ -1,0 +1,47 @@
+entries changed:   Contents/section0.xml
+entries added:     (none)
+entries dropped:   (none)
+byte-identical:    Contents/content.hpf, Contents/header.xml, Contents/section1.xml, META-INF/container.rdf, mimetype
+verify hard checks: PASS
+seccnt:            ok
+structure Contents/section0.xml: p=8 tbl=1 pic=0 eq=0 lineseg=5
+  rowcnt mismatches: none
+  nested 주석:        0
+structure Contents/section1.xml: p=1 tbl=0 pic=0 eq=0 lineseg=0
+  rowcnt mismatches: none
+  nested 주석:        0
+--- minimal diff: Contents/section0.xml
+  -<hp:tbl id="500" rowCnt="3" colCnt="2" borderFillIDRef="0">
+  -<hp:sz width="40000" height="3000"/>
+  +<hp:tbl id="500" rowCnt="2" colCnt="2" borderFillIDRef="0">
+  +<hp:sz width="40000" height="2000"/>
+  -<hp:p id="602" paraPrIDRef="0">
+  -<hp:linesegarray/>
+  -<hp:run charPrIDRef="0">
+  -<hp:t>r1c0</hp:t>
+  -</hp:run>
+  -</hp:p>
+  -</hp:subList>
+  -</hp:tc>
+  -<hp:tc>
+  -<hp:cellAddr rowAddr="1" colAddr="1"/>
+  -<hp:cellSpan rowSpan="1" colSpan="1"/>
+  -<hp:cellSz width="20000" height="1000"/>
+  -<hp:subList>
+  -<hp:p id="603" paraPrIDRef="0">
+  -<hp:linesegarray/>
+  -<hp:run charPrIDRef="0">
+  -<hp:t>r1c1</hp:t>
+  -</hp:run>
+  -</hp:p>
+  -</hp:subList>
+  -</hp:tc>
+  -</hp:tr>
+  -<hp:tr>
+  -<hp:tc>
+  -<hp:cellAddr rowAddr="2" colAddr="0"/>
+  -<hp:cellSpan rowSpan="1" colSpan="1"/>
+  -<hp:cellSz width="20000" height="1000"/>
+  -<hp:subList>
+  -<hp:cellAddr rowAddr="2" colAddr="1"/>
+  +<hp:cellAddr rowAddr="1" colAddr="1"/>

@@ -1,0 +1,16 @@
+entries changed:   Contents/section0.xml
+entries added:     (none)
+entries dropped:   (none)
+byte-identical:    Contents/content.hpf, Contents/header.xml, Contents/section1.xml, META-INF/container.rdf, mimetype
+verify hard checks: PASS
+seccnt:            ok
+structure Contents/section0.xml: p=10 tbl=1 pic=0 eq=0 lineseg=6
+  rowcnt mismatches: none
+  nested 주석:        0
+structure Contents/section1.xml: p=1 tbl=0 pic=0 eq=0 lineseg=0
+  rowcnt mismatches: none
+  nested 주석:        0
+--- minimal diff: Contents/section0.xml
+  -<hp:linesegarray/>
+  -<hp:t>r0c0</hp:t>
+  +<hp:t>4,701</hp:t>

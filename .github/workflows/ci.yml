@@ -16,5 +16,8 @@ jobs:
           python-version: "3.12"
       - name: Install deps (lxml core + openpyxl/python-docx for export tests)
         run: pip install lxml openpyxl python-docx
-      - name: Run selftest (proves the repacker is lossless)
+      - name: Run selftest (proves the primitives behave)
         run: python skills/hwpx-editing/scripts/selftest.py
+
+      - name: Run golden corpus (proves the output has not drifted)
+        run: python corpus/run_corpus.py

@@ -1,0 +1,25 @@
+entries changed:   Contents/section0.xml
+entries added:     (none)
+entries dropped:   (none)
+byte-identical:    Contents/content.hpf, Contents/header.xml, Contents/section1.xml, META-INF/container.rdf, mimetype
+verify hard checks: PASS
+seccnt:            ok
+structure Contents/section0.xml: p=10 tbl=1 pic=0 eq=0 lineseg=7
+  rowcnt mismatches: none
+  nested 주석:        0
+structure Contents/section1.xml: p=1 tbl=0 pic=0 eq=0 lineseg=0
+  rowcnt mismatches: none
+  nested 주석:        0
+--- minimal diff: Contents/section0.xml
+  -<hp:cellSz width="20000" height="1000"/>
+  +<hp:cellSz width="23000" height="1000"/>
+  -<hp:cellSz width="20000" height="1000"/>
+  +<hp:cellSz width="17000" height="1000"/>
+  -<hp:cellSz width="20000" height="1000"/>
+  +<hp:cellSz width="23000" height="1000"/>
+  -<hp:cellSz width="20000" height="1000"/>
+  +<hp:cellSz width="17000" height="1000"/>
+  -<hp:cellSz width="20000" height="1000"/>
+  +<hp:cellSz width="23000" height="1000"/>
+  -<hp:cellSz width="20000" height="1000"/>
+  +<hp:cellSz width="17000" height="1000"/>
