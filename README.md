@@ -65,6 +65,23 @@ LLM 에이전트가 알아서 하게 두면 **열리지 않는 파일**을 만�
 **실제로 돌아가는 스크립트**를 쥐여줍니다. 그래서 편집이 "그냥 됩니다" — 원본이
 한글에서 열리면, 편집본도 열립니다.
 
+### 비슷한 도구들과의 차이
+
+HWPX 생태계에는 좋은 도구가 이미 여러 개 있고, 목적이 서로 다릅니다.
+
+| 도구 | 잘하는 일 | 전제 |
+|---|---|---|
+| [python-hwpx](https://github.com/airmang/python-hwpx) | HWPX를 코드에서 다루는 범용 라이브러리. 구조 검증 CLI, 저장 영수증, 넓은 API. 파이썬을 직접 쓴다면 첫 선택. | `pip install python-hwpx` |
+| [python-hwpx-automation](https://github.com/airmang/python-hwpx-automation) | 위 라이브러리 위의 저작·양식 채움 워크플로 계층 (MCP 서버 포함). | 같은 계열 패키지 |
+| [hwpx-skill](https://github.com/jkf87/hwpx-skill) | 마크다운·URL에서 문서를 **새로 만드는** 워크플로. 행정 기안문·문제지 같은 정형 서식과 HWP→HWPX 변환. | python-hwpx, 변환은 Node.js |
+| [pyhwpx](https://github.com/martiniifun/pyhwpx) | 설치된 한글을 COM으로 조종 — 한글 기능 전체를 쓸 수 있다. | Windows + 한글 설치 |
+| [hwpx-contents-extract](https://github.com/hancom-io/hwpx-contents-extract) | 한컴이 낸 텍스트 추출 예제(Java). | JDK. 2022년 이후 갱신 없음 |
+| **이 스킬** | **이미 있는 문서를 에이전트가 편집할 때.** 라이브러리 API가 아니라 *에이전트가 읽는 규칙*이고, 조판 결함을 렌더해서 잡는다 — 셀 줄바꿈, 빈 페이지, 목차 페이지번호 불일치, 글꼴 혼재, 떼어낸 장의 취합. | `lxml` 하나. 렌더 감사에만 한글 필요 |
+
+다른 도구들이 **문서를 만드는** 데 강하다면, 이 스킬은 **이미 있는 문서가 편집을 견디는지**를
+본다. 구조 검사를 전부 통과하고도 한글로 열어야만 드러나는 결함이 대상이라, 편집을
+python-hwpx로 하면서 감사만 여기서 가져다 쓰는 것도 된다.
+
 ### 구성
 
 ```
@@ -237,6 +254,24 @@ so LLM agents, left to guess, reliably produce files that won't open.
 This skill hands the agent **the exact rules** (verified against real 한글 rendering
 and at the byte level) plus **working scripts**, so an edit "just works": if the
 original opens in 한글, the edited file opens too.
+
+### How this differs from the neighbours
+
+The HWPX ecosystem already has good tools, built for different jobs.
+
+| Tool | Best at | Requires |
+|---|---|---|
+| [python-hwpx](https://github.com/airmang/python-hwpx) | The general-purpose library for driving HWPX from code — structural validation CLI, save receipts, broad API. First choice if you're writing Python yourself. | `pip install python-hwpx` |
+| [python-hwpx-automation](https://github.com/airmang/python-hwpx-automation) | An authoring / form-filling workflow layer on top of that library, MCP server included. | same package family |
+| [hwpx-skill](https://github.com/jkf87/hwpx-skill) | **Creating** documents from markdown/text/URLs — Korean administrative forms, exam sheets — plus HWP→HWPX conversion. | python-hwpx; Node.js for conversion |
+| [pyhwpx](https://github.com/martiniifun/pyhwpx) | Driving an installed 한글 over COM, so the whole application is available. | Windows + 한글 installed |
+| [hwpx-contents-extract](https://github.com/hancom-io/hwpx-contents-extract) | Hancom's own text-extraction sample (Java). | JDK; no updates since 2022 |
+| **This skill** | **When an agent edits a document you already have.** It's *rules the agent reads* rather than an API you call, and it catches typesetting defects by rendering — wrapped cells, blank pages, TOC page numbers that don't match, mixed fonts, chapters that must re-merge. | `lxml` only; 한글 needed for the render audits |
+
+Where the others are strong at **producing** a document, this one checks whether an
+**existing** document survives being edited — the defects that pass every structural
+check and only show up once 한글 renders the page. Editing with python-hwpx and
+borrowing only the audits from here is a perfectly good way to use it.
 
 ### What's in the box
 
