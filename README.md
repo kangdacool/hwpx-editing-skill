@@ -136,7 +136,16 @@ Claude Code · Codex · Cursor · Gemini CLI 등에 스킬 폴더를 설치해 �
 
 스킬과 `/hwpx` 명령이 함께 설치되고, `/plugin marketplace update kangdacool`로 갱신합니다.
 
-**그 밖의 에이전트 — 스킬 폴더로**
+**그 밖의 에이전트 — `npx skills` 로**
+
+```bash
+npx skills add kangdacool/hwpx-editing-skill
+```
+
+설치할 에이전트를 물어봅니다. 전역 설치는 `-g`, 특정 에이전트를 바로 고르려면
+`-a claude-code` 처럼 덧붙입니다.
+
+**직접 복사 — 스킬 폴더로**
 
 에이전트를 고르세요. 아래 명령을 그대로 실행하면 됩니다.
 
@@ -328,7 +337,16 @@ one-liner in **[Quick install](#quick-install-one-line)** below.
 This installs the skill plus the `/hwpx` command. Update with
 `/plugin marketplace update kangdacool`.
 
-**Any other agent — as a skill folder**
+**Any other agent — with `npx skills`**
+
+```bash
+npx skills add kangdacool/hwpx-editing-skill
+```
+
+It asks which agents to install into. Add `-g` for a user-wide install, or
+`-a claude-code` to pick an agent directly.
+
+**By hand — as a skill folder**
 
 Pick your agent and run the commands below.
 
