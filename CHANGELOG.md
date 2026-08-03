@@ -3,6 +3,26 @@
 이 파일은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식을 따르고,
 버전은 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 씁니다.
 
+## [0.1.3] — 2026-08-03
+
+### Added
+
+- **Guide §7: ship the file 한글 itself paginated.** Structural edits force you to drop
+  `linesegarray` (the line-layout cache), and a file with none of it announces that no
+  human ever saved it from 한글. Measured behaviour: 한글 *preserves* an existing cache
+  but never creates one — opening and saving leaves `0 → 0`. It appears only after
+  layout actually completes (`0 → 1,696`); reading the page count is the surest trigger,
+  since counting pages requires pagination to finish. Two traps: the pass is
+  asynchronous, so the same code produced 1,696 once and 0 the next time — count the
+  result and retry; and saving over the path that is currently open does not take.
+- **Guide §7: verifying a format conversion.** Render both files and compare the text —
+  only a render shows what a conversion dropped. To know whether the *fields* survived
+  as fields rather than as baked-in text, round-trip back (hwp → hwpx) and run
+  `crossref_check.py`. Matching renders only prove the numbers look right today.
+- **Guide §7: memo balloons break render-text comparison.** PDF extraction splices the
+  author, date and memo body into the middle of the paragraph, so a comparator reports a
+  mismatch where the document is fine. Two of two mismatches in a real run were this.
+
 ## [0.1.2] — 2026-08-03
 
 Adds cross-references (상호참조) — the field 한글 uses to cite an endnote a second
