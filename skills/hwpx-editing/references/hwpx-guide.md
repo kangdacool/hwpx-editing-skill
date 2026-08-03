@@ -1,7 +1,8 @@
-# HWPX 편집 가이드 v7
+# HWPX 편집 가이드 v7.1
 
 > 한글(HWPX)을 Python/lxml로 안전하게 편집하는 실전 가이드. 모든 항목은 한글 렌더링 또는 바이트 수준으로 **검증된 것**만 담았다.
 > **v6→v7**: 다단·목차·수식(§5)과 페이지·단·구조 편집(§6)을 통합. 나머지는 v6의 핵심만 압축.
+> **v7→v7.1**: **상호참조(CROSSREF, 재인용)** 절 신설(§4) + 흔한 실패 23·24 + `crossref_check.py`.
 
 ---
 
@@ -30,7 +31,11 @@
 
 22. **여러 장을 합치는 보고서인데 미주 배치가 `END_OF_DOCUMENT`.** 합치는 순간 그 장의 미주가 **보고서 맨 끝으로 몰리고 「참고문헌」 표제는 빈 채로 남는다.** 단독으로 열면 멀쩡해 보인다. `secPr/endNotePr`을 `ON_SECTION`·`END_OF_SECTION`으로(§6-E).
 
-> 19·20·21·22는 같은 부류다 — **XML은 well-formed, id 중복 없음, 하드체크 전부 PASS. 한글로 열어야만 드러난다.** 22는 한 술 더 떠서 **단독 렌더도 통과하고 합쳐야 드러난다.** 구조·표·주석·구역을 건드렸으면 렌더까지, 취합될 원고라면 **합쳐서** 렌더까지 가야 끝난 것이다(§7).
+23. **본문을 통째로 갈아끼워 상호참조(CROSSREF) 필드 쌍을 날림 → 재인용 번호가 사라진다.** 재인용은 「미주 번호를 따라가는 필드」다(`fieldBegin` + 캐시 `<hp:t>` + `fieldEnd`). 문단 텍스트를 통째 치환하면 `ctrl` 쌍이 함께 지워진다. **인용번호가 리터럴 텍스트로 남아 있는 것도 같은 부류** — 지금은 맞아 보이고 번호가 밀리는 «그때» 틀린다. `crossref_check.py`로 편집 전·후 각각 확인(§4-상호참조).
+
+24. **새로 만든 미주의 `instId`가 2³¹을 넘음 → 그것을 가리키는 상호참조가 본문에 「?)」로 찍힌다.** 한글 문서에는 `3,1xx,xxx,xxx` 같은 id가 흔해서, 최대값에서 이어 발급하면 바로 넘어간다. **XML well-formed·id 중복 0·verify 전항목 PASS인데 렌더에서만 보인다.** `make_uid()`는 2³¹ 아래에서만 발급한다 — 직접 만든 발급기를 쓸 때만 주의(§4-상호참조).
+
+> 19·20·21·22·23·24는 같은 부류다 — **XML은 well-formed, id 중복 없음, 하드체크 전부 PASS. 한글로 열어야만 드러난다.** 22는 한 술 더 떠서 **단독 렌더도 통과하고 합쳐야 드러난다.** 구조·표·주석·구역·**필드**를 건드렸으면 렌더까지, 취합될 원고라면 **합쳐서** 렌더까지 가야 끝난 것이다(§7).
 
 ---
 
@@ -250,6 +255,38 @@ hwpxlib.add_endnotes(para, "…확립된 합병증으로 다룬다.", tmpl,
 이미 중첩된 파일을 고칠 때는 **지우지 말고 꺼낸다** — 그 미주는 대개 정상 인용이 자리를 잘못 잡은 것이다. 안쪽 `<hp:ctrl>`을 통째로 떼어 본문 run의 해당 문장 뒤로 옮기고 재번호한 뒤, 본문 텍스트가 한 글자도 안 바뀌었음을 `own()` 비교로 확인한다.
 
 **메모(MEMO)**: 검토 주석이 `fieldBegin type="MEMO" > subList`에 저장됨(⚠️ `<hp:memo>`가 **아니다** — `.//hp:memo`로 찾으면 0개인 흔한 오진). `parameters`에 Author·CreateDateTime, `subList`에 메모 텍스트. `fieldBegin`/`fieldEnd`는 `beginIDRef`로 페어링(다른 단락에 걸칠 수 있음), 제거 시 **양쪽 `<hp:ctrl>` 모두 제거**(걸린 본문 `<hp:t>`는 유지). 본문 추출 시 `own()`으로 제외. → **`hwpxlib.read_memos(sec)`**(id·author·date·text) / **`hwpxlib.delete_memo(sec, memo_id=None)`**(한글 '메모 삭제'와 동일 결과 검증됨). 검토자가 accept한 제안은 tracking·메모 모두 삭제, reject는 메모로 남긴다는 관행에 유의.
+
+**상호참조(CROSSREF) — 같은 문헌을 다시 인용할 때**: 정부·학술 보고서에서 「미주를 쓰되, 앞에 쓴 문헌을 계속 인용해야 하면 본문에 번호만 적는다」를 구현하는 것이 한글의 **상호참조**다. 중복 미주를 만들지 않고 **번호가 대상 미주를 따라간다**.
+
+```xml
+<hp:run charPrIDRef="54">                        <!-- 54=위첨자 -->
+  <hp:ctrl><hp:fieldBegin id="…" type="CROSSREF" fieldid="…">
+    <hp:parameters>
+      <hp:stringParam name="Command">?#1153878366;4;1;0;0;</hp:stringParam>
+      <hp:stringParam name="RefPath">?#1153878366;</hp:stringParam>   <!-- 대상 endNote instId -->
+      <hp:stringParam name="RefType">TARGET_ENDNOTE</hp:stringParam>
+      <hp:stringParam name="RefContentType">OBJECT_TYPE_NUMBER</hp:stringParam>
+    </hp:parameters></hp:fieldBegin></hp:ctrl>
+  <hp:t>3</hp:t>                                  <!-- 캐시된 표시 번호 -->
+  <hp:ctrl><hp:fieldEnd beginIDRef="…" fieldid="…"/></hp:ctrl>
+  <hp:t>)</hp:t>                                  <!-- 리터럴 괄호(필드 밖) -->
+</hp:run>
+```
+
+- **한글은 파일을 열 때 번호를 다시 계산한다** — 실측: 미주를 앞에 하나 끼우자 본문 재인용이 `1)2)` → `2)3)`으로 정확히 밀렸다. 그러니 **미주를 중간에 추가해도 안전하다.** 캐시는 한글을 거치지 않는 검사·추출 경로를 위해 `sync_crossref_cache()`로 맞춰 둔다.
+- **`RefContentType`이 `OBJECT_TYPE_NUMBER`가 아니면 번호를 따라가지 않는다.** `_PAGE`로 걸린 것을 실제로 만났는데, 그 문서에서는 우연히 맞는 숫자가 찍혀 있다가 번호를 밀자 한쪽만 안 움직였다(`1)2)` → `2)2)`). `Command`의 세 번째 값도 `1`(번호)이어야 한다.
+- **필드는 run 경계를 넘는다.** `fieldBegin`이 본문 run 끝에 있고 캐시 `<hp:t>`와 `fieldEnd`가 다음 run에 있는 배치가 흔하다(한글이 서식 경계에서 run을 쪼갠다). run 안에서만 짝을 찾으면 **캐시가 빈 것으로 오진**한다 → `read_crossrefs()`는 문단 단위로 훑는다.
+- **연속 인용 두 개가 한 run을 공유**하기도 한다(`[fb][t][fe][t)][fb][t][fe][t)]`). run째 지우면 둘 다 사라진다.
+- 한 문단에 미주와 재인용을 함께 달 때는 **번호 순서**를 확인할 것. `add_endnotes()`는 앵커 문구 바로 뒤(=그 run 안)에 넣으므로, 문단 끝에 이미 재인용이 붙어 있으면 새 미주가 그 앞에 놓여 `14)3)`처럼 역순이 된다. 그럴 땐 문단 «맨 끝»에 새 run으로 붙인다.
+
+```python
+xrs = hwpxlib.read_crossrefs(sec)          # 무엇이 무엇을 가리키는지
+tmpl = hwpxlib.crossref_template(sec)      # 자기완결형 run 하나를 템플릿으로
+hwpxlib.add_crossrefs(para, [inst_id], uid, template=tmpl)   # 재인용 붙이기
+hwpxlib.sync_crossref_cache(sec)           # 캐시 번호 재계산
+```
+
+검사는 **`crossref_check.py FILE.hwpx`** — 페어링·고아 참조·캐시 불일치·`_PAGE` 오설정·**리터럴로 남은 인용번호 후보**를 한 번에 본다. `--baseline BEFORE.hwpx`로 편집 전후의 «미주↔재인용 대응표»를 기계 대조하고, `--fix-cache OUT.hwpx`로 캐시를 맞춘다. `verify.py` 3e가 같은 검사를 하드 게이트로 돌린다.
 
 **변경추적(track change, reviewer 수정)**: 삽입=`<hp:insertBegin Id TcId/>…텍스트…<hp:insertEnd .../>`, 삭제=`<hp:deleteBegin/>…<hp:deleteEnd/>`(빈 마커=문단분리/서식만). 작성자·시각·종류는 **`header.xml`의 `<hp:trackChanges itemCnt><hp:trackChange type="Insert/Delete/CharShape" date author…/>`**. 읽기: **`hwpxlib.read_track_changes(sec)`** → `{"insert":[…],"delete":[…]}`. ⚠️ **수용/거부는 XML로 하지 말 것**(마커+삭제내용 정확 제거가 까다로워 손상 위험) — **한글 COM**으로: `hwp.HAction.Run("TrackChangeApplyAll")`(수용) / `"TrackChangeCancelAll"`(거부). ★ **반환값이 False여도 실제 적용됨** → `insertBegin`/`deleteBegin` 카운트 0으로 검증. COM은 **전 문서 적용**이라 특정 장만 처리하려면 사본에서. (pyhwpx에 `TrackChange*` 메서드군; `IsTrackChange`=추적모드 on/off.)
 

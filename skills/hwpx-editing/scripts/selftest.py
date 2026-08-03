@@ -510,6 +510,73 @@ def main() -> int:
     print(f"[{'PASS' if e17 else 'FAIL'}] 17. stated-vs-real gates: rowCnt ({rc}), "
           f"secCnt ({sc}), width no-verdict instead of raise ({no_verdict})")
 
+    # 18. 상호참조(CROSSREF): 재인용을 미주 번호에 묶는 필드. 넷을 증명한다 —
+    #     (a) 필드가 run 경계를 넘어도 캐시 번호를 제대로 읽는가(한글이 서식 경계에서 run을
+    #         쪼개므로 실제 문서에서 흔한 배치다. run 안에서만 찾으면 빈 값으로 오진한다),
+    #     (b) 미주 순서가 바뀌면 sync_crossref_cache()가 캐시를 맞추는가,
+    #     (c) make_uid()가 2^31 미만만 발급하는가 — 넘으면 한글이 대상을 못 찾아 「?)」로
+    #         찍히는데 XML 검사·id중복검사·verify는 전부 통과한다,
+    #     (d) add_crossrefs()가 대상을 가리키는 새 필드를 만드는가.
+    def _en(pid, inst, txt):
+        return (f'<hp:p id="{pid}"><hp:run charPrIDRef="0"><hp:t>{txt}</hp:t>'
+                f'<hp:ctrl><hp:endNote number="1" instId="{inst}"><hp:subList>'
+                f'<hp:p id="{pid + 1}"><hp:run charPrIDRef="0">'
+                f'<hp:t> Ref {inst}.</hp:t></hp:run></hp:p></hp:subList>'
+                '</hp:endNote></hp:ctrl></hp:run></hp:p>')
+
+    def _params(inst):
+        return ('<hp:parameters cnt="4">'
+                f'<hp:stringParam name="Command">?#{inst};4;1;0;0;</hp:stringParam>'
+                f'<hp:stringParam name="RefPath">?#{inst};</hp:stringParam>'
+                '<hp:stringParam name="RefType">TARGET_ENDNOTE</hp:stringParam>'
+                '<hp:stringParam name="RefContentType">OBJECT_TYPE_NUMBER</hp:stringParam>'
+                '</hp:parameters>')
+
+    xr_sec = H.etree.fromstring((
+        f'<hp:sec xmlns:hp="{pns}">'
+        + _en(300, "500", "첫 인용이다.") + _en(302, "501", "둘째 인용이다.")
+        # 재인용 ①: fieldBegin은 본문 run 끝에, 캐시와 fieldEnd는 «다음 run»에 (경계 넘음)
+        + '<hp:p id="304"><hp:run charPrIDRef="0"><hp:t>재인용 문장이다.</hp:t>'
+          '<hp:ctrl><hp:fieldBegin id="600" type="CROSSREF" fieldid="700">'
+        + _params("501")
+        + '</hp:fieldBegin></hp:ctrl></hp:run>'
+          '<hp:run charPrIDRef="54"><hp:t>2</hp:t>'
+          '<hp:ctrl><hp:fieldEnd beginIDRef="600" fieldid="700"/></hp:ctrl>'
+          '<hp:t>)</hp:t></hp:run></hp:p>'
+        # 재인용 ②: 한 run 안에 자기완결 — clone_crossref의 템플릿이 된다
+          '<hp:p id="305"><hp:run charPrIDRef="54"><hp:ctrl>'
+          '<hp:fieldBegin id="601" type="CROSSREF" fieldid="701">'
+        + _params("500")
+        + '</hp:fieldBegin></hp:ctrl><hp:t>1</hp:t>'
+          '<hp:ctrl><hp:fieldEnd beginIDRef="601" fieldid="701"/></hp:ctrl>'
+          '<hp:t>)</hp:t></hp:run></hp:p></hp:sec>').encode("utf-8"))
+
+    xrs = H.read_crossrefs(xr_sec)
+    read_ok = ([x["target"] for x in xrs] == ["501", "500"]
+               and [x["cached"] for x in xrs] == ["2", "1"])          # (a)
+    first_note = xr_sec.find(f'.//{{{pns}}}p[@id="300"]')             # 미주 순서를 뒤집는다
+    xr_sec.remove(first_note)
+    xr_sec.append(first_note)
+    fixed = H.sync_crossref_cache(xr_sec)
+    after = {x["target"]: x["cached"] for x in H.read_crossrefs(xr_sec)}
+    sync_ok = fixed == 2 and after == {"501": "1", "500": "2"}        # (b)
+    big = H.etree.fromstring(
+        f'<hp:sec xmlns:hp="{pns}"><hp:p id="3107726200"/></hp:sec>'.encode("utf-8"))
+    big_uid = H.make_uid(big)
+    range_ok = all(big_uid() < 2 ** 31 for _ in range(3))             # (c)
+    tmpl = H.crossref_template(xr_sec)
+    target_p = xr_sec.find(f'.//{{{pns}}}p[@id="302"]')
+    made = H.add_crossrefs(target_p, ["500"], H.make_uid(xr_sec), template=tmpl)
+    added = (len(made) == 1
+             and any(x["target"] == "500" and x["para"] is target_p
+                     for x in H.read_crossrefs(xr_sec))
+             and not H.find_duplicate_ids(xr_sec))                    # (d)
+    e18 = read_ok and sync_ok and range_ok and tmpl is not None and added
+    ok &= e18
+    print(f"[{'PASS' if e18 else 'FAIL'}] 18. 상호참조: run 경계 넘는 캐시 읽기 ({read_ok}), "
+          f"재번호 후 캐시 동기화 ({sync_ok}), make_uid<2^31 ({range_ok}), "
+          f"add_crossrefs ({added})")
+
     print()
     print("RESULT:", "ALL PASS" if ok else "FAILURES PRESENT")
     return 0 if ok else 1

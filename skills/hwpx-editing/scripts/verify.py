@@ -10,7 +10,8 @@ What it checks (each must pass before you ship a file):
     2. every sectionN.xml + content.hpf is well-formed XML
     3. zero duplicate ids (0 / 2147483648 sentinels ignored), IDRef/itemCnt integrity,
        table cell widths, no 각주/미주 nested inside another 주석, tbl@rowCnt vs the
-       real row count, and header.xml secCnt vs the number of sections
+       real row count, header.xml secCnt vs the number of sections, and
+       cross-reference (상호참조) field integrity
     4. linesegarray inventory (informational)
     5. zip integrity: testzip ok, mimetype first & STORED
     6. structural inventory (pic/tbl/equation/breaks) — compared to --orig if given
@@ -178,6 +179,23 @@ def main() -> int:
                   "" if mismatch is None else
                   f"secCnt={mismatch[0]} but {mismatch[1]} sectionN.xml "
                   f"({', '.join(H.section_names(z)[:4])})")
+
+    # 3g. Cross-reference fields (상호참조). 재인용을 미주 번호에 묶는 필드는 본문을
+    #     통째로 치환하면 ctrl 쌍째 사라지고, 인용번호가 리터럴로 남아 있으면 번호가
+    #     밀릴 때만 틀린다 — 둘 다 XML 검사·렌더 한 번으로는 안 보인다.
+    #     상세·수리는 crossref_check.py (--baseline / --fix-cache).
+    try:
+        import crossref_check as X
+        xerr, xwarn, xinfo = [], [], []
+        for name in H.section_names(z):
+            X.check_section(name, H.etree.fromstring(z.read(name)), xerr, xwarn, xinfo)
+        hard_ok &= _p(not xerr, "3g. 상호참조(CROSSREF) 무결성",
+                      "" if not xerr else "; ".join(xerr[:3]))
+        if xwarn:
+            print(f"[warn] 3g'. 리터럴 인용번호 후보 {len(xwarn)}건 — "
+                  f"crossref_check.py로 확인: {xwarn[0][:110]}")
+    except Exception as e:  # 검사기 자체 문제로 빌드를 막지는 않는다
+        print(f"[warn] 3g. 상호참조 검사를 건너뜀 ({type(e).__name__}: {e})")
 
     # 5. zip integrity (report before 4/6 which are informational)
     zi = H.zip_integrity(z)

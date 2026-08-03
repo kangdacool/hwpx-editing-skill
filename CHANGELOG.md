@@ -3,6 +3,47 @@
 이 파일은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식을 따르고,
 버전은 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 씁니다.
 
+## [0.1.2] — 2026-08-03
+
+Adds cross-references (상호참조) — the field 한글 uses to cite an endnote a second
+time without duplicating it. Korean government and academic reports lean on this:
+the house rule is "use endnotes, and when you cite an earlier source again, put only
+the number in the body." Editing such a document as plain text quietly destroys it.
+
+### Added
+
+- **`crossref_check.py`** — integrity check for cross-reference fields.
+  Catches the three ways they break, each of which passes every existing check:
+  a field whose `fieldBegin`/`fieldEnd` pair was severed, a citation number left
+  as **literal text** (right today, wrong the moment anything renumbers), and
+  `RefContentType=OBJECT_TYPE_PAGE`, which does not track the endnote number at
+  all. `--baseline BEFORE.hwpx` diffs the endnote↔citation map across an edit so a
+  silently dropped citation is visible; `--fix-cache OUT.hwpx` recomputes the
+  cached display numbers.
+- **Helpers in `hwpxlib`**: `read_crossrefs`, `crossref_template`,
+  `clone_crossref`, `add_crossrefs`, `sync_crossref_cache`.
+- **`verify.py` check 3g** gates on cross-reference integrity.
+- **Guide §4 "상호참조"** documents the field layout and the measured behaviour:
+  한글 recomputes these numbers when it opens the file, so inserting an endnote in
+  the middle is safe — what is not safe is losing the field.
+
+### Fixed
+
+- **`make_uid()` no longer issues ids at or above 2³¹.** It used to continue from
+  the document's largest id, and 한글 documents routinely carry ids around
+  3,1xx,xxx,xxx — so a freshly cloned endnote got an `instId` past the 32-bit
+  boundary and every cross-reference pointing at it rendered as `?)`. The XML was
+  well-formed, ids were unique, and `verify.py` passed; only opening the file in
+  한글 showed it.
+
+### Notes
+
+- Two parsing traps are now handled in the helpers rather than left to the caller:
+  a field can **span two runs** (한글 splits runs at formatting boundaries, so the
+  `fieldBegin` sits at the end of one run and the cached number in the next —
+  searching within a single run reports an empty cache), and **two consecutive
+  citations can share one run**, so deleting the run removes both.
+
 ## [0.1.1] — 2026-07-30
 
 Closes the gap between what the guide documents and what the tooling actually

@@ -958,6 +958,172 @@ def delete_memo(sec, memo_id=None):
     return removed
 
 
+def _para_stream(p):
+    """문단의 run 자식들을 순서대로 평탄화.
+
+    ⚠️ 필드는 run 경계를 넘는다 — `fieldBegin`이 한 run의 끝에 있고 캐시된 `<hp:t>`와
+    `fieldEnd`가 «다음 run»에 있는 배치가 실제로 흔하다(한글이 글자서식이 바뀌는 지점에서
+    run을 쪼갠다). run 안에서만 짝을 찾으면 캐시가 빈 것으로 오진한다.
+    """
+    for run in p.findall(f"{P}run"):
+        for node in run:
+            yield node
+
+
+def read_crossrefs(sec):
+    """상호참조(CROSSREF) 필드를 읽는다.
+
+    반환: [{"id", "target", "reftype", "contenttype", "cached", "para", "fieldBegin",
+             "cached_nodes"}] — 문서 순서.
+
+    한글의 「상호참조」는 재인용을 «미주 번호를 따라가는 필드»로 만든다. 구조:
+
+        <hp:ctrl><hp:fieldBegin type="CROSSREF" id=…>
+            <hp:parameters>… RefPath=?#<instId>; RefType=TARGET_ENDNOTE
+                             RefContentType=OBJECT_TYPE_NUMBER …
+        </hp:fieldBegin></hp:ctrl>
+        <hp:t>3</hp:t>                       ← 캐시된 표시 번호
+        <hp:ctrl><hp:fieldEnd beginIDRef=…/></hp:ctrl>
+        <hp:t>)</hp:t>                       ← 리터럴 괄호(필드 밖)
+    """
+    out = []
+    for p in sec.iter(f"{P}p"):
+        nodes = list(_para_stream(p))
+        for i, node in enumerate(nodes):
+            if node.tag != f"{P}ctrl":
+                continue
+            fb = node.find(f"{P}fieldBegin")
+            if fb is None or fb.get("type") != "CROSSREF":
+                continue
+            prm = {}
+            for tag in ("stringParam", "integerParam", "booleanParam"):
+                for el in fb.findall(f".//{P}{tag}"):
+                    prm[el.get("name")] = el.text or ""
+            cached_nodes = []
+            for nxt in nodes[i + 1:]:
+                if nxt.tag == f"{P}ctrl":
+                    fe = nxt.find(f"{P}fieldEnd")
+                    if fe is not None and fe.get("beginIDRef") == fb.get("id"):
+                        break
+                elif nxt.tag == f"{P}t":
+                    cached_nodes.append(nxt)
+            out.append({
+                "id": fb.get("id"),
+                "target": (prm.get("RefPath") or "").strip("?#;"),
+                "reftype": prm.get("RefType", ""),
+                "contenttype": prm.get("RefContentType", ""),
+                "cached": "".join(t.text or "" for t in cached_nodes),
+                "cached_nodes": cached_nodes,
+                "fieldBegin": fb,
+                "para": p,
+            })
+    return out
+
+
+def crossref_template(sec):
+    """복제용 상호참조 run — [ctrl(fieldBegin) t(번호) ctrl(fieldEnd) t(')')]가 «한 run 안에»
+    다 있는 것만 고른다(필드가 run 경계를 넘는 배치는 템플릿으로 못 쓴다)."""
+    for run in sec.iter(f"{P}run"):
+        kids = list(run)
+        if len(kids) < 4 or kids[0].tag != f"{P}ctrl":
+            continue
+        fb = kids[0].find(f"{P}fieldBegin")
+        if fb is None or fb.get("type") != "CROSSREF" or kids[1].tag != f"{P}t":
+            continue
+        if kids[2].tag != f"{P}ctrl":
+            continue
+        fe = kids[2].find(f"{P}fieldEnd")
+        if fe is None or fe.get("beginIDRef") != fb.get("id"):
+            continue
+        if kids[3].tag != f"{P}t" or (kids[3].text or "") != ")":
+            continue
+        return run
+    return None
+
+
+def clone_crossref(template_run, target_instid, uid, cached="1", suffix=")"):
+    """템플릿 run을 복제해 «미주 번호를 따라가는» 새 상호참조 run을 만든다.
+
+    `target_instid`는 대상 `<hp:endNote instId=…>`의 instId.
+    🔴 **`uid`는 2³¹ 미만 값을 내야 한다.** `make_uid()`는 문서의 최대 id에서 이어 발급하는데,
+       한글이 만든 문서에는 3,1xx,xxx,xxx 같은 값이 흔해서 그대로 쓰면 새 instId가
+       2,147,483,647을 넘는다. 그러면 **한글이 대상을 찾지 못해 본문에 「?)」로 찍힌다** —
+       XML 검사·verify·id중복검사는 전부 통과하고 렌더에서만 보인다(2026-08-03 실측).
+       make_uid()는 이 상한을 지키도록 되어 있으니 직접 만든 발급기를 쓸 때만 주의.
+    """
+    run = copy.deepcopy(template_run)
+    while len(run) > 4:
+        run.remove(run[-1])
+    fb = run[0].find(f"{P}fieldBegin")
+    fe = run[2].find(f"{P}fieldEnd")
+    new_id, new_fid = str(uid()), str(uid())
+    assert int(new_id) < 2 ** 31 and int(new_fid) < 2 ** 31, \
+        "상호참조 id가 2^31을 넘었다 — 한글이 해석하지 못한다"
+    fb.set("id", new_id)
+    fb.set("fieldid", new_fid)
+    fe.set("beginIDRef", new_id)
+    fe.set("fieldid", new_fid)
+    for sp in fb.findall(f".//{P}stringParam"):
+        name = sp.get("name")
+        if name == "RefPath":
+            sp.text = f"?#{target_instid};"
+        elif name == "Command":
+            sp.text = f"?#{target_instid};4;1;0;0;"
+        elif name == "RefContentType":
+            sp.text = "OBJECT_TYPE_NUMBER"   # _PAGE면 번호를 «따라가지 않는다»
+        elif name == "RefType":
+            sp.text = "TARGET_ENDNOTE"
+    run[1].text = str(cached)
+    run[3].text = suffix
+    return run
+
+
+def add_crossrefs(p, target_instids, uid, template=None, sec=None):
+    """문단 «맨 끝»에 재인용(상호참조)을 순서대로 붙인다. 반환: 만든 run 목록.
+
+    미주(`add_endnotes`)는 앵커 문구 바로 뒤 = 그 run «안»에 들어가므로, 문단 끝에 이미
+    상호참조가 붙어 있으면 새 미주가 그 앞에 놓여 번호가 역순으로 찍힌다(`14)3)`).
+    한 문단에 미주와 재인용을 함께 달 때는 **작은 번호가 먼저 오도록** 순서를 확인할 것.
+    """
+    tmpl = template if template is not None else crossref_template(
+        sec if sec is not None else p.getroottree().getroot())
+    if tmpl is None:
+        raise ValueError("복제할 상호참조 템플릿이 문서에 없다 — 한글에서 하나 만들어 둘 것")
+    runs = p.findall(f"{P}run")
+    if not runs:
+        raise ValueError("run이 없는 문단")
+    idx = list(p).index(runs[-1])
+    made = []
+    for k, inst in enumerate(target_instids, 1):
+        run = clone_crossref(tmpl, inst, uid)
+        p.insert(idx + k, run)
+        made.append(run)
+    return made
+
+
+def sync_crossref_cache(sec):
+    """캐시된 표시 번호를 «대상 미주의 섹션 내 서수»로 다시 써넣는다. 반환: 고친 개수.
+
+    한글은 파일을 열 때 이 번호를 다시 계산하므로 렌더는 캐시가 틀려도 맞게 나온다.
+    그래도 맞춰 두는 이유는, 한글을 거치지 않는 검사·추출 경로(cross-verify, 텍스트 감사)가
+    이 캐시를 «문서가 말하는 번호»로 읽기 때문이다. 편집 직후 한 번 돌린다.
+    """
+    ordinal = {n.get("instId"): i
+               for i, n in enumerate(sec.iter(f"{P}endNote", f"{P}footNote"), 1)}
+    fixed = 0
+    for xr in read_crossrefs(sec):
+        want = ordinal.get(xr["target"])
+        if want is None or not xr["cached_nodes"]:
+            continue
+        if xr["cached"].strip() == str(want):
+            continue
+        xr["cached_nodes"][0].text = str(want)
+        for t in xr["cached_nodes"][1:]:
+            t.text = ""
+        fixed += 1
+    return fixed
+
+
 def read_track_changes(sec):
     """변경추적(reviewer)을 읽는다. 반환: {"insert": [텍스트…], "delete": [텍스트…]}.
 
@@ -990,13 +1156,27 @@ def make_uid(root):
 
     Uniqueness is guaranteed only within the passed `root` (ids are section-
     scoped); it does not dedupe across sections.
+
+    🔴 **발급 값은 2³¹(2,147,483,647) 미만으로 유지한다.** 한글이 만든 문서에는
+       3,1xx,xxx,xxx 같은 id가 흔한데, 그 최대값에서 그냥 이어 발급하면 새 id가 2³¹을
+       넘는다. 그러면 **상호참조가 가리키는 미주의 instId를 한글이 해석하지 못해 본문에
+       「?)」로 찍힌다** — XML well-formed, id 중복 0, verify 전항목 PASS인데 렌더에서만
+       보인다(2026-08-03 실측: 재인용 4건). 그래서 2³¹ 이상은 «이미 쓰인 값»으로만 취급하고,
+       발급은 2³¹ 아래 빈 자리에서 한다.
     """
     ids = {int(v) for elx in root.iter() for a in _ID_ATTRS
            if (v := elx.get(a)) and str(v).isdigit()}
-    counter = [(max(ids) + 5) if ids else 5]
+    LIMIT = 2 ** 31
+    below = {i for i in ids if i < LIMIT}
+    counter = [(max(below) + 5) if below else 5]
 
     def uid():
         counter[0] += 2
+        while counter[0] in ids:
+            counter[0] += 2
+        if counter[0] >= LIMIT:
+            raise ValueError("발급할 id가 2^31에 도달했다 — 한글이 상호참조를 해석하지 못한다")
+        ids.add(counter[0])
         return counter[0]
 
     return uid

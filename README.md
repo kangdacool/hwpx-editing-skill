@@ -95,6 +95,7 @@ skills/hwpx-editing/
     ├── verify.py            # §7 빌드 체크리스트 실행 (CI 게이트 가능)
     ├── audit_layout.py      # 렌더 기반 감사 — 셀 줄바꿈·고아 페이지·목차 페이지번호
     ├── audit_typography.py  # 서식 감사 — 글꼴 혼재·JUSTIFY 자간 벌어짐
+    ├── crossref_check.py    # 상호참조(재인용) 무결성 — 끊긴 필드·리터럴 번호·캐시 어긋남
     ├── remerge_check.py     # 떼어낸 장이 다시 합쳐지는지 실증 (번호 이어받기/재시작)
     ├── hwpx_guard.py        # PostToolUse 훅 — 방금 쓴 파일이 깨졌으면 그 자리에서 알림
     └── selftest.py          # 실제 파일 없이 재압축 무손실성 증명
@@ -208,6 +209,7 @@ python skills/hwpx-editing/scripts/inspect_hwpx.py 내문서.hwpx --breaks
 python skills/hwpx-editing/scripts/verify.py 편집본.hwpx --orig 원본.hwpx
 python skills/hwpx-editing/scripts/audit_layout.py 편집본.hwpx   # 렌더해서 레이아웃 결함 확인
 python skills/hwpx-editing/scripts/remerge_check.py 병합본.hwpx 내장.hwpx  # 떼어낸 장이 다시 합쳐지는지
+python skills/hwpx-editing/scripts/crossref_check.py 편집본.hwpx --baseline 원본.hwpx  # 상호참조(재인용)
 python skills/hwpx-editing/scripts/selftest.py     # 파일 없이 동작 점검
 python skills/hwpx-editing/scripts/tables_to_xlsx.py 내문서.hwpx   # 표 전부 엑셀로(병합 보존)
 python skills/hwpx-editing/scripts/hwpx_to_markdown.py 내문서.hwpx  # 본문·표를 마크다운으로(LLM 요약용)
@@ -239,6 +241,10 @@ python skills/hwpx-editing/scripts/hwpx_to_docx.py 내문서.hwpx  # 한글 → 
 - **취합될 원고인데 미주 배치가 `END_OF_DOCUMENT`** — 합치는 순간 미주가 보고서 맨 끝으로
   몰리고 「참고문헌」 표제는 빈 채 남습니다. **단독으로 열면 멀쩡해 보입니다.**
   *(`remerge_check.py`로 실제로 합쳐서 렌더해 확인)*
+- **재인용이 상호참조가 아니라 리터럴 숫자** — 지금은 맞아 보이고, 번호가 밀리는 «그때»
+  틀립니다. 새로 만든 미주의 `instId`가 2³¹을 넘으면 한글이 대상을 못 찾아 본문에 `?)`가
+  찍히는데, 이 역시 XML·id·verify를 전부 통과합니다.
+  *(`crossref_check.py` + `verify.py` 3g + `hwpxlib.make_uid()`의 2³¹ 상한)*
 
 ### 호환성
 
@@ -310,6 +316,7 @@ skills/hwpx-editing/
     ├── verify.py            # run the §7 build checklist (CI-gateable)
     ├── audit_layout.py      # audit the RENDER — wrapped cells, orphan pages, TOC numbers
     ├── audit_typography.py  # audit formatting — mixed fonts, JUSTIFY letter-spacing
+    ├── crossref_check.py    # cross-reference integrity — severed fields, literal numbers
     ├── remerge_check.py     # prove an extracted chapter re-merges with correct numbering
     ├── hwpx_guard.py        # PostToolUse hook — flags a file it just wrote, on the spot
     └── selftest.py          # prove the repacker is lossless — no real file needed

@@ -90,6 +90,7 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
 | `audit_layout.py FILE [--pdf X.pdf]` | **렌더 기반** 감사 — 구조검사가 통과하는 결함만 노린다(열 폭을 넘겨 두 줄로 쪼개진 숫자, 각주만 남은 희박 페이지, 목차 쪽번호 불일치). `--pdf` 없으면 한글 COM으로 렌더. |
 | `audit_typography.py FILE [--expect-face 이름] [--expect-body-pt N]` | 글꼴 혼재와 JUSTIFY+KEEP_WORD 자간 벌어짐을 잡는다. `--expect-*`가 어긋나면 종료코드 1. |
 | `remerge_check.py MASTER CHAPTER` | 떼어낸 장이 다시 합쳐지는지 실증 — 실제로 끼워 넣고 렌더해 번호를 읽는다(§6-E). |
+| `crossref_check.py FILE [--baseline BEFORE] [--fix-cache OUT]` | **상호참조(재인용) 무결성** — 필드 페어링·고아 참조·캐시 번호·`_PAGE` 오설정·리터럴로 남은 인용번호. `--baseline`으로 편집 전후 «미주↔재인용 대응표» 기계 대조(§4-상호참조). |
 | `selftest.py` | Prove the repacker is lossless without a real file. |
 | `tables_to_xlsx.py` · `hwpx_to_markdown.py` · `hwpx_to_docx.py` · `data_to_hwpx_table.py` | 변환: 표→Excel, 문서→Markdown(LLM이 읽기용), →Word, Excel/CSV→한글 표. 병합셀 보존. 각각 `-h`. |
 
@@ -98,9 +99,11 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
 `insert_ctrls_after`/`find_para`(`.tail`-safe) · 문단 복제 `pick_template`/`clone_para` ·
 표 `table_grid`/`cell_text`/`set_cell_text`/`fill_table`/`delete_row`/`delete_column`/
 `set_column_width`/`table_width_ok` · 그림 `find_pic`/`replace_image` · 주석
-`add_endnotes`/`clone_endnote`/`nested_notes` · 장 추출 `extract_section` · 메모·변경추적
-`read_memos`/`delete_memo`/`read_track_changes` · 위생 `make_uid`/`strip_linesegarray`/
-`find_duplicate_ids`/`structural_counts`. 각 함수의 함정은 docstring과 가이드에 있다.
+`add_endnotes`/`clone_endnote`/`nested_notes` · **상호참조(재인용)** `read_crossrefs`/
+`crossref_template`/`clone_crossref`/`add_crossrefs`/`sync_crossref_cache` · 장 추출
+`extract_section` · 메모·변경추적 `read_memos`/`delete_memo`/`read_track_changes` · 위생
+`make_uid`/`strip_linesegarray`/`find_duplicate_ids`/`structural_counts`.
+각 함수의 함정은 docstring과 가이드에 있다.
 
 Scripts need **lxml**; table→Excel also needs **openpyxl**. Python 3.10+.
 
@@ -113,7 +116,7 @@ failure modes)**; skim that first, then jump to:
 - **§2** raw-preserving 재압축 (가장 중요)
 - **§3** `linesegarray` 제거 · 클론 후 id 중복 제거
 - **§4** 문단 · **표**(셀 폭 합 = 표 폭) · **그림**(`orgSz`·`imgDim`·재채우기) ·
-  서식 · **각주/미주** · 메모 · 오타감사 스코핑 — 가장 크니 소절만 골라 읽을 것
+  서식 · **각주/미주** · **상호참조(재인용)** · 메모 · 오타감사 스코핑 — 가장 크니 소절만 골라 읽을 것
 - **§5** 다단 · 자동 목차 · 한컴 수식 스크립트(LaTeX 아님)
 - **§6** 숨은 break → 제목 고아 → 빈 페이지 → 넓은 표/구역 이동 → **E. 장 추출·재병합**
 - **§7** `verify.py`가 자동화하는 것과 한글 왕복 주의
