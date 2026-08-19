@@ -3,6 +3,43 @@
 이 파일은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식을 따르고,
 버전은 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 씁니다.
 
+## [0.1.4] — 2026-08-19
+
+### Added
+
+- **`scripts/hwp_to_hwpx.py` — batch legacy `.hwp` → `.hwpx` (or `.pdf`) via 한글 COM.**
+  The skill previously said "convert it in 한글 first", which is fine for one file and
+  useless for a folder of thousands. Established against a real 5,187-file archive.
+- **Password-protected `.hwp` can be converted.** 한컴 provides no API to pass a password
+  to `Open()` (official forum answer) — but that is not the same as impossible, since the
+  *dialog* is automatable. Three conditions must all hold, and missing any one produces
+  the identical symptom (`Open()` never returns — no exception, no timeout):
+  ① the security module is registered as `FilePathCheckerModule` — **not**
+  `FilePathCheckerModuleExample`, the name in 한컴's own sample code, whose use raises an
+  **invisible** "파일 접근 허용" dialog (`HNC_DIALOG`, `IsWindowVisible == 0`) that blocks
+  forever; ② the password is typed into the edit field and submitted with **`{ENTER}`**
+  (the 확인 button's `invoke()`/`click_input()` do nothing), from the **main thread**
+  (a worker thread finds the window but its UIA calls silently no-op); ③
+  **`SetMessageBoxMode(0x00011011)` before `Open()`** — otherwise every call *after* the
+  document opens (`SaveAs`, `GetTextFile`, …) hangs on another unnamed modal.
+- **Output validation, because a "successful" conversion can be unusable.** Exporting a
+  locked `.hwp` to `.hwpx` keeps the protection: `Contents/section0.xml` comes out
+  encrypted, so every XML tool sees binary rather than markup. The converter strips it
+  by copying the body into a fresh document and then **checks that the result parses**
+  (`hwpx_is_readable`) instead of trusting the exit status. PDF export is unaffected.
+- **Lock detection without opening anything:** HWP 5.0's `FileHeader` stream, DWORD at
+  offset 36, **bit `0x02`** = password set. `--scan` reports which files are locked; a
+  five-thousand-file folder scans in minutes, which is what makes it practical to handle
+  them separately instead of letting each burn a timeout.
+
+### Changed
+
+- SKILL.md gained a **"Legacy `.hwp` → `.hwpx`, and the 한글 COM traps"** section: COM has
+  no timeouts, so four distinct causes all present as "it stopped" — diagnose by enabling
+  one condition at a time. Batch hygiene documented too (one COM object per file, since a
+  COM object is bound to its creating thread; per-file timeout; and the caveat that
+  cleanup kills *every* `Hwp.exe`, so run one instance at a time).
+
 ## [0.1.3] — 2026-08-03
 
 ### Added

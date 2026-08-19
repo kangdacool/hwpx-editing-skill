@@ -25,8 +25,12 @@ before editing**, and **run the scripts in `scripts/` to repack and verify** —
 don't hand-roll the zip or eyeball correctness.
 
 > **HWPX only.** This handles `.hwpx` (zip + XML) exclusively. A legacy `.hwp`
-> (OLE binary, signature `D0CF11E0`) must first be converted in 한글 via
-> **다른 이름으로 저장 → HWPX(.hwpx)**. The scripts detect `.hwp` and say so.
+> (OLE binary, signature `D0CF11E0`) must be converted first. The scripts detect
+> `.hwp` and say so. For one file, 한글의 **다른 이름으로 저장 → HWPX**; for a folder,
+> **`scripts/hwp_to_hwpx.py FOLDER`** converts in batch (needs Windows + 한글 +
+> `pywin32`), including **password-protected files** — see "Legacy `.hwp`" below.
+> Read-only text/image extraction from `.hwp` doesn't need conversion at all: use
+> the `hwp5-reading` skill.
 
 ## The one rule that matters most
 
@@ -91,6 +95,7 @@ to the source** — meaning "if the original opens in 한글, your edit opens to
 | `audit_typography.py FILE [--expect-face 이름] [--expect-body-pt N]` | 글꼴 혼재와 JUSTIFY+KEEP_WORD 자간 벌어짐을 잡는다. `--expect-*`가 어긋나면 종료코드 1. |
 | `remerge_check.py MASTER CHAPTER` | 떼어낸 장이 다시 합쳐지는지 실증 — 실제로 끼워 넣고 렌더해 번호를 읽는다(§6-E). |
 | `crossref_check.py FILE [--baseline BEFORE] [--fix-cache OUT]` | **상호참조(재인용) 무결성** — 필드 페어링·고아 참조·캐시 번호·`_PAGE` 오설정·리터럴로 남은 인용번호. `--baseline`으로 편집 전후 «미주↔재인용 대응표» 기계 대조(§4-상호참조). |
+| `hwp_to_hwpx.py FOLDER [--password PW] [--scan] [--to pdf]` | **레거시 `.hwp` → `.hwpx` 일괄 변환**(한글 COM). 암호 걸린 파일도 처리하고, 산출물이 실제로 파싱되는지까지 확인한다. `--scan`은 한글을 띄우지 않고 «어느 파일이 잠겼는지»만 보고. |
 | `selftest.py` | Prove the repacker is lossless without a real file. |
 | `tables_to_xlsx.py` · `hwpx_to_markdown.py` · `hwpx_to_docx.py` · `data_to_hwpx_table.py` | 변환: 표→Excel, 문서→Markdown(LLM이 읽기용), →Word, Excel/CSV→한글 표. 병합셀 보존. 각각 `-h`. |
 
@@ -120,6 +125,39 @@ failure modes)**; skim that first, then jump to:
 - **§5** 다단 · 자동 목차 · 한컴 수식 스크립트(LaTeX 아님)
 - **§6** 숨은 break → 제목 고아 → 빈 페이지 → 넓은 표/구역 이동 → **E. 장 추출·재병합**
 - **§7** `verify.py`가 자동화하는 것과 한글 왕복 주의
+
+## Legacy `.hwp` → `.hwpx`, and the 한글 COM traps
+
+`scripts/hwp_to_hwpx.py` exists because driving 한글 through COM has **no timeouts**:
+when it wants a dialog answered, `Open()` simply never returns — no exception, no
+`False`. Four different causes look identical from the outside, so diagnose by
+enabling one condition at a time rather than guessing.
+
+- **Security module.** Register `FilePathCheckerModule` — **not**
+  `FilePathCheckerModuleExample`, the name in 한컴's sample code. Get it wrong and an
+  **invisible** "파일 접근 허용" dialog (`HNC_DIALOG`, `IsWindowVisible == 0`) blocks
+  every open forever. The script self-heals the registration.
+- **Password-protected `.hwp` is convertible.** 한컴 provides no API to pass a
+  password to `Open()` (official forum answer) — but that is not the same as
+  impossible: the *dialog* can be driven. Three things must all hold, and missing
+  any one produces the same "it hangs" symptom: ① the security module is registered
+  (so the dialog is even visible), ② the password goes into the edit field and is
+  submitted with **`{ENTER}`** — the 확인 button's `invoke()`/`click` do nothing — and
+  the UIA calls run on the **main thread** (from a worker they find the window but
+  silently fail), ③ **`SetMessageBoxMode(0x00011011)` before `Open()`**, or every
+  call *after* the document opens hangs on another unnamed modal.
+- ⚠️ **Protection follows the document into `.hwpx`.** Exporting a locked `.hwp`
+  "succeeds", but `Contents/section0.xml` comes out **encrypted**, so every tool here
+  sees binary instead of markup. The script strips it by copying the body into a new
+  document, then **verifies the output parses** (`hwpx_is_readable`) rather than
+  trusting the exit status. PDF export is unaffected.
+- **Detecting locks costs nothing:** HWP 5.0's `FileHeader` stream, DWORD at offset
+  36, **bit `0x02`** = password set. No 한글, no opening — thousands of files scan in
+  minutes (`--scan`).
+- **Batch hygiene:** one COM object per file (a COM object is bound to the thread
+  that made it), a per-file timeout so one bad document can't stall the run, and
+  `taskkill` on timeout. Run only one instance at a time — the cleanup kills *every*
+  `Hwp.exe`, including one a person is using.
 
 ## Guardrails
 
