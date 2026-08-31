@@ -44,8 +44,13 @@ except (AttributeError, ValueError, OSError):
 def _hwp():
     """A registered HwpObject. Prefer the lab helper (it self-heals the security
     module registration); fall back to raw COM."""
-    for p in (r"D:\onedrive\claude\agent\tools",):
-        if os.path.isdir(p) and p not in sys.path:
+    # Find the lab helper WITHOUT baking in a machine path: resolve it from this file's own
+    # location, and let an env var override. In a standalone install of this skill that
+    # directory does not exist, so we simply fall through to raw COM below.
+    _here = os.path.dirname(os.path.abspath(__file__))
+    for p in (os.environ.get("LAB_TOOLS", ""),
+              os.path.normpath(os.path.join(_here, "..", "..", "..", "..", "agent", "tools"))):
+        if p and os.path.isdir(p) and p not in sys.path:
             sys.path.insert(0, p)
     try:
         from hwp_render import make_hwp
