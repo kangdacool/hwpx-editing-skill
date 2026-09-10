@@ -15,6 +15,14 @@ Usage:
 
 Requires: lxml; openpyxl only for .xlsx input.
 """
+# 표 폭은 «한 계산»을 셋이 나눠 쓴다 — docx·pptx·hwpx.
+# 계산은 같은 폴더의 col_widths.py — 정본은 docx-editing 이고 여기 «복사본»을 둔다
+# (스킬 하나만 받아도 동작해야 한다: ops3 공개 조건 1 자족성)
+import os as _os, sys as _sys
+_CW = _os.path.dirname(_os.path.abspath(__file__))
+if _CW not in _sys.path:
+    _sys.path.insert(0, _CW)
+from col_widths import content_col_widths  # noqa: E402
 import argparse
 import copy
 import csv
@@ -70,7 +78,7 @@ def read_data(path, sheet=None):
     return grid, merges
 
 
-def insert_table(target, grid, merges, out):
+def insert_table(target, grid, merges, out, widths=None):
     """Append a table built from grid/merges to `target` (cloning its first table's
     cell style), write to `out`, and return (rows, cols, merge_count)."""
     H.ensure_hwpx(target)
@@ -104,7 +112,14 @@ def insert_table(target, grid, merges, out):
             for c in range(c0, c0 + cs):
                 if (r, c) != (r0, c0):
                     covered.add((r, c))
-    widths = [tblw // m] * m
+    # ⛔ 균등 분할 금지(2026-09-09). 내용량 비례로 계산한다 — docx 와 «같은 함수»다.
+    #    폭을 손으로 주려면 `widths=` 로 넘긴다(명시적 값이 언제나 이긴다).
+    if widths is None:
+        try:
+            cm = content_col_widths([[str(c) for c in r] for r in grid], 16.0, m)
+            widths = [int(tblw * (x / sum(cm))) for x in cm]
+        except Exception:
+            widths = [tblw // m] * m
     widths[-1] = tblw - sum(widths[:-1])  # cell widths sum exactly to table width
 
     uid = H.make_uid(root)
