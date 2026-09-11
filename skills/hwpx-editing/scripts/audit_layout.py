@@ -27,6 +27,7 @@ Exit code is non-zero when any check reports a finding, so it can gate a build.
 import argparse
 import os
 import re
+import shutil
 import sys
 import tempfile
 import zipfile
@@ -43,11 +44,50 @@ PAGENO = re.compile(r"\s*[-–]\s*([0-9]+|[ivxlcdm]+)\s*[-–]\s*")
 WRAPPED_NUM = re.compile(r"(?<![\d,])\d{1,3},\d{1,2}$")
 
 
+def _ensure_dispatch(progid="HWPFrame.HwpObject"):
+    """EnsureDispatch, with recovery from a corrupted pywin32 gen_py cache.
+
+    pywin32 bakes type libraries into `%LOCALAPPDATA%\\Temp\\gen_py` as Python
+    modules. When that cache goes bad (an interrupted generation, a Python
+    upgrade, two processes generating at once) COM dispatch dies with
+
+        AttributeError: module 'win32com.gen_py.<guid>x0x1x0'
+                        has no attribute 'CLSIDToClassMap'
+
+    which reads like "한글 is missing / COM is broken" but is neither — 한글 is
+    fine and only the cache is rotten. Left unhandled, this tool told the caller
+    to pass a pre-rendered `--pdf`, i.e. to skip the render the audit exists for.
+    Wiping the cache and retrying fixes it, so do that here instead of asking.
+
+    Two traps, both found by testing the recovery instead of trusting it:
+      * Recreating the directory with `os.makedirs` is not enough — gen_py is a
+        package, so without `__init__.py` regeneration fails with
+        `ModuleNotFoundError: No module named 'win32com.gen_py'`.
+        `gencache.GetGeneratePath()` writes both.
+      * Drop only the *submodules* from `sys.modules`. `win32com.gen_py` itself
+        is synthesised at import time by `win32com/__init__.py`
+        (`types.ModuleType(...)`), exists nowhere on disk, and can never be
+        re-imported once removed.
+    """
+    import win32com
+    import win32com.client as win32
+    try:
+        return win32.gencache.EnsureDispatch(progid)
+    except (AttributeError, ImportError):
+        path = getattr(win32com, "__gen_path__", "")
+        if not path or not os.path.isdir(path):
+            raise
+        shutil.rmtree(path, ignore_errors=True)
+        for name in [m for m in sys.modules if m.startswith("win32com.gen_py.")]:
+            del sys.modules[name]
+        win32.gencache.GetGeneratePath()
+        return win32.gencache.EnsureDispatch(progid)
+
+
 def render_pdf(hwpx_path, pdf_path):
     """Render through 한글 COM. Kept minimal on purpose — if you already have a
     render helper, pass --pdf instead."""
-    import win32com.client as win32
-    hwp = win32.gencache.EnsureDispatch("HWPFrame.HwpObject")
+    hwp = _ensure_dispatch()
     try:
         hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule")
     except Exception:
@@ -202,8 +242,17 @@ def main():
         print("   없음")
 
     print("\n실패 %d건, 확인 필요 %d쪽" % (findings, len(sparse)))
+    # Deleting our own scratch PDF must never decide the verdict. 한글 can still
+    # hold the handle after Quit(), and on Windows that raises PermissionError —
+    # which used to propagate, making the process exit non-zero on a document
+    # with zero findings. Callers that only read the exit code (audit.py, the
+    # deliverable hook) then reported a clean file as [FAIL]. Leave the stray
+    # temp file behind rather than lie about the document.
     if tmp and os.path.exists(tmp):
-        os.remove(tmp)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
     return 1 if findings else 0
 
 
